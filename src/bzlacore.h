@@ -75,6 +75,7 @@ struct Bzla
 
   BzlaMemMgr *mm;
   BzlaSolver *slv;
+  BzlaSolver *qslv;
   BzlaCallbacks cbs;
 
   BzlaBVAssList *bv_assignments;
@@ -96,8 +97,6 @@ struct Bzla
   BzlaPtrHashTable *ufs;
   BzlaPtrHashTable *lambdas;
   BzlaPtrHashTable *quantifiers;
-  BzlaPtrHashTable *exists_vars;
-  BzlaPtrHashTable *forall_vars;
   BzlaPtrHashTable *feqs;
   BzlaPtrHashTable *parameterized;
 
