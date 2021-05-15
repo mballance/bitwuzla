@@ -125,8 +125,6 @@ Finally, we delete the Bitwuzla instance.
 .. todo::
 
   * What to do with terms retrieved by get_value?
-  * unsat cores
-  * unsat assumptions
 
 
 Examples
@@ -143,6 +141,9 @@ The example used in the :ref:`c/api:quickstart` guide.
 | The SMT-LIB input for this example can be found at `examples/c/quickstart.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/quickstart.smt2>`_.
 | The source code for this example can be found at `examples/c/quickstart.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/quickstart.c>`_.
 
+.. literalinclude:: ../../examples/c/quickstart.smt2
+     :language: smtlib
+
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
 
@@ -153,6 +154,9 @@ An incremental example with :code:`push` and :code:`pop`.
 
 | The SMT-LIB input for this example can be found at `examples/c/pushpop.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/pushpop.smt2>`_.
 | The source code for this example can be found at `examples/c/pushpop.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/pushpop.c>`_.
+
+.. literalinclude:: ../../examples/c/pushpop.smt2
+     :language: smtlib
 
 .. literalinclude:: ../../examples/c/pushpop.c
      :language: c
@@ -168,5 +172,41 @@ All active assumptions are inactivated after the check sat call.
 | The SMT-LIB input for this example can be found at `examples/c/checksatassuming.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/checksatassuming.smt2>`_.
 | The source code for this example can be found at `examples/c/checksatassuming.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/checksatassuming.c>`_.
 
+.. literalinclude:: ../../examples/c/checksatassuming.smt2
+     :language: smtlib
+
 .. literalinclude:: ../../examples/c/checksatassuming.c
+     :language: c
+
+Unsat Core Example
+^^^^^^^^^^^^^^^^^^
+
+This example shows how to extract an unsat core.
+It creates bit-vector and floating-point terms and further illustrates how to
+create lambda terms (:code:`define-fun`).
+
+| The SMT-LIB input for this example can be found at `examples/c/unsatcore.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatcore.smt2>`_.
+| The source code for this example can be found at `examples/c/unsatcore.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatcore.c>`_.
+
+
+.. literalinclude:: ../../examples/c/unsatcore.smt2
+     :language: smtlib
+
+.. literalinclude:: ../../examples/c/unsatcore.c
+     :language: c
+
+Unsat Assumptions Example
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This example shows how to implement the example above with
+:code:`get-unsat-assumptions`.
+
+| The SMT-LIB input for this example can be found at `examples/c/unsatassumptions.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatassumptions.smt2>`_.
+| The source code for this example can be found at `examples/c/unsatassumptions.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatassumptions.c>`_.
+
+
+.. literalinclude:: ../../examples/c/unsatassumptions.smt2
+     :language: smtlib
+
+.. literalinclude:: ../../examples/c/unsatassumptions.c
      :language: c
