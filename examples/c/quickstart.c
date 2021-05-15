@@ -12,8 +12,10 @@ main()
   // Note: This will silently fall back to one of the compiled in SAT solvers
   //       if the selected solver is not compiled in.
   bitwuzla_set_option_str(bzla, BITWUZLA_OPT_SAT_ENGINE, "cms");
+
   // Create a bit-vector sort of size 8.
   BitwuzlaSort *bv8 = bitwuzla_mk_bv_sort(bzla, 8);
+
   // Create two bit-vector variables of that sort.
   BitwuzlaTerm *x = bitwuzla_mk_const(bzla, bv8, "x");
   BitwuzlaTerm *y = bitwuzla_mk_const(bzla, bv8, "y");
@@ -27,8 +29,8 @@ main()
 
   // (bvsdiv x (_ bv2 8))
   BitwuzlaTerm *sdiv = bitwuzla_mk_term2(bzla, BITWUZLA_KIND_BV_SDIV, x, two);
-  // (bvashr x (_ bv1 8))
-  BitwuzlaTerm *ashr = bitwuzla_mk_term2(bzla, BITWUZLA_KIND_BV_ASHR, x, one);
+  // (bvashr y (_ bv1 8))
+  BitwuzlaTerm *ashr = bitwuzla_mk_term2(bzla, BITWUZLA_KIND_BV_ASHR, y, one);
   // ((_ extract 3 0) (bvsdiv x (_ bv2 8)))
   BitwuzlaTerm *sdive =
       bitwuzla_mk_term1_indexed2(bzla, BITWUZLA_KIND_BV_EXTRACT, sdiv, 3, 0);
@@ -39,7 +41,7 @@ main()
   // (assert
   //     (distinct
   //         ((_ extract 3 0) (bvsdiv x (_ bv2 8)))
-  //         ((_ extract 3 0) (bvashr x (_ bv1 8)))
+  //         ((_ extract 3 0) (bvashr y (_ bv1 8)))
   bitwuzla_assert(
       bzla, bitwuzla_mk_term2(bzla, BITWUZLA_KIND_DISTINCT, sdive, ashre));
 
@@ -53,4 +55,7 @@ main()
               : (result == BITWUZLA_UNSAT ? "unsat" : "unknown"));
   // Print model in SMT-LIBv2 format.
   bitwuzla_print_model(bzla, "smt2", stdout);
+
+  // Finally, delete the Bitwuzla instance.
+  bitwuzla_delete(bzla);
 }

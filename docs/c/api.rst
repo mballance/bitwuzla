@@ -16,45 +16,39 @@ Quickstart
 
 First, create a Bitwuzla instance:
 
-.. code-block:: c
-
-  Bitwuzla *bzla = bitwuzla_new();
+.. literalinclude:: ../../examples/c/quickstart.c
+     :language: c
+     :lines: 8
 
 This instance can be configured via :c:func:`bitwuzla_set_option()`.  
 For example, to enable model generation
 (SMT-LIB: :code:`(set-option :produce-models true)`):
 
-.. code-block:: c
-
-  bitwuzla_set_option(bzla, BITWUZLA_OPT_PRODUCE_MODELS, 1);
+.. literalinclude:: ../../examples/c/quickstart.c
+     :language: c
+     :lines: 10
 
 Some options expect string values rather than integer values, for example,
 to enable CryptoMiniSat as back end SAT solver instead of the default
 SAT solver CaDiCaL:
 
-.. code-block:: c
-
-  bitwuzla_set_option_str(bzla, BITWUZLA_OPT_SAT_ENGINE, "cms");
+.. literalinclude:: ../../examples/c/quickstart.c
+     :language: c
+     :lines: 12-14
 
 For more details on available options, see :ref:`c/options:options`.
 
 Next, you will want to create some expressions and assert formulas.
 For example, consider the following SMT-LIB input:
 
-.. code-block:: smtlib
-
-  (declare-const x (_ BitVec 8))
-  (declare-const y (_ BitVec 8))
-  (assert
-      (distinct
-          ((_ extract 3 0) (bvsdiv x (_ bv2 8)))
-          ((_ extract 3 0) (bvashr x (_ bv1 8)))
+.. literalinclude:: ../../examples/c/quickstart.smt2
+     :language: smtlib
 
 This input is created and asserted as follows:
 
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
-     :lines: 7-44
+     :lines: 7-46
 
 .. note::
   Bitwuzla does not distinguish between sort Boolean and a bit-vector sort of
@@ -88,7 +82,7 @@ satisfiability can be determined via :c:func:`bitwuzla_check_sat()`.
 
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
-     :lines: 46-47
+     :lines: 48-49
 
 
 .. note::
@@ -101,7 +95,7 @@ resulting model can be printed via :c:func:`bitwuzla_print_model()`.
 
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
-     :lines: 54-55
+     :lines: 56-57
 
 This will output a possible model (default: in SMT-LIB format, configurable
 via option :c:func:`bitwuzla_OPT_OUTPUT_FORMAT`) as follows:
@@ -110,7 +104,7 @@ via option :c:func:`bitwuzla_OPT_OUTPUT_FORMAT`) as follows:
 
   (
     (define-fun x () (_ BitVec 8) #b11111111)
-    (define-fun y () (_ BitVec 8) #b00000000)
+    (define-fun y () (_ BitVec 8) #b00011110)
   )
 
 
@@ -120,26 +114,59 @@ Alternatively, it is possible to query the value of expressions via
 .. code-block:: c
 
   BitwuzlaTerm *v = bitwuzla_get_value(bzla,
-      bitwuzla_mk_term2(bzla, BITWUZLA_KIND_BV_MUL, x, y));
+      bitwuzla_mk_term2(bzla, BITWUZLA_KIND_BV_MUL, x, x));
+
+Finally, we delete the Bitwuzla instance.
+
+.. literalinclude:: ../../examples/c/quickstart.c
+     :language: c
+     :lines: 60
 
 .. todo::
 
   * What to do with terms retrieved by get_value?
   * unsat cores
   * unsat assumptions
-  * push/pop
 
 
 Examples
 --------
 
-All examples can be found in directory
-`examples <https://github.com/bitwuzla/bitwuzla/tree/main/examples>`_.
-For instructions on how to build these examples, see
-`examples/README.md <https://github.com/bitwuzla/bitwuzla/tree/main/examples/README.md>`_.
+| All examples can be found in directory `examples <https://github.com/bitwuzla/bitwuzla/tree/main/examples>`_.
+| For instructions on how to build these examples, see `examples/README.md <https://github.com/bitwuzla/bitwuzla/tree/main/examples/README.md>`_.
 
-Quickstart example:
+Quickstart Example
 ^^^^^^^^^^^^^^^^^^^
 
+The example used in the :ref:`c/api:quickstart` guide.
+
+| The SMT-LIB input for this example can be found at `examples/c/quickstart.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/quickstart.smt2>`_.
+| The source code for this example can be found at `examples/c/quickstart.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/quickstart.c>`_.
+
 .. literalinclude:: ../../examples/c/quickstart.c
+     :language: c
+
+Incremental Example with push and pop
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+An incremental example with :code:`push` and :code:`pop`.
+
+| The SMT-LIB input for this example can be found at `examples/c/pushpop.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/pushpop.smt2>`_.
+| The source code for this example can be found at `examples/c/pushpop.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/pushpop.c>`_.
+
+.. literalinclude:: ../../examples/c/pushpop.c
+     :language: c
+
+Incremental Example with check-sat-assuming
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This example shows how to implement the example above with
+:code:`check-sat-assuming` instead of :code:`push` and :code:`pop`.
+Note that Bitwuzla requires to first assume formulas (the assumptions in the :code:`check-sat-assuming` list) with :c:func:`bitwuzla_assume()` before calling :c:func:`bitwuzla_check_sat()`.
+All active assumptions are inactivated after the check sat call.
+
+| The SMT-LIB input for this example can be found at `examples/c/checksatassuming.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/checksatassuming.smt2>`_.
+| The source code for this example can be found at `examples/c/checksatassuming.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/checksatassuming.c>`_.
+
+.. literalinclude:: ../../examples/c/checksatassuming.c
      :language: c
