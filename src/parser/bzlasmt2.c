@@ -604,7 +604,7 @@ cerr_smt2(BzlaSMT2Parser *parser, const char *p, int32_t ch, const char *s)
   {
     case '\\':
       n = "backslash";
-      d = "\\\\";
+      d = "\\";
       break;
     case '\n':
       n = "new line";
@@ -1406,20 +1406,21 @@ RESTART:
     for (;;)
     {
       if ((ch = nextch_smt2(parser)) == EOF)
+      {
         return !cerr_smt2(parser, "unexpected", ch, "in string");
+      }
       if (ch == '"')
       {
         pushch_smt2(parser, '"');
-        pushch_smt2(parser, 0);
-        return BZLA_STRING_CONSTANT_TAG_SMT2;
+        ch = nextch_smt2(parser);
+        if (ch != '"')
+        {
+          savech_smt2(parser, ch);
+          pushch_smt2(parser, 0);
+          return BZLA_STRING_CONSTANT_TAG_SMT2;
+        }
       }
-      if (ch == '\\')
-      {
-        if ((ch = nextch_smt2(parser)) != '"' && ch != '\\')
-          return !cerr_smt2(
-              parser, "unexpected", ch, "after backslash '\\\\' in string");
-      }
-      else if (!(cc_smt2(parser, ch) & BZLA_STRING_CHAR_CLASS_SMT2))
+      if (!(cc_smt2(parser, ch) & BZLA_STRING_CHAR_CLASS_SMT2))
       {
         // TODO unreachable?
         return !cerr_smt2(parser, "invalid", ch, "in string");
@@ -5451,9 +5452,16 @@ echo_smt2(BzlaSMT2Parser *parser)
   if (tag != BZLA_STRING_CONSTANT_TAG_SMT2)
     return !perr_smt2(parser, "expected string after 'echo'");
 
-  fprintf(parser->outfile, "%s\n", parser->token.start);
+  char *str = bzla_mem_strdup(parser->mem, parser->token.start);
+  if (!read_rpar_smt2(parser, " after 'echo'"))
+  {
+    bzla_mem_freestr(parser->mem, str);
+    return 0;
+  }
+  fprintf(parser->outfile, "%s\n", str);
   fflush(parser->outfile);
-  return skip_sexprs(parser, 1);
+  bzla_mem_freestr(parser->mem, str);
+  return 1;
 }
 
 static int32_t
