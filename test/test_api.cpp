@@ -2669,7 +2669,7 @@ TEST_F(TestApi, print_model)
 //  ASSERT_NO_FATAL_FAILURE(bitwuzla_print_model(d_other_bzla, "smt2", stdout));
 }
 
-TEST_F(TestApi, dump_formula)
+TEST_F(TestApi, dump_formula1)
 {
   ASSERT_DEATH(bitwuzla_dump_formula(nullptr, "btor", stdout),
                d_error_not_null);
@@ -4012,4 +4012,76 @@ TEST_F(TestApi, term_dump1)
   unlink(filename.c_str());
 
   ASSERT_EQ("(bvnot a)", content);
+}
+
+TEST_F(TestApi, term_dump2)
+{
+  std::string filename = "term_dump2.out";
+  FILE *tmpfile        = fopen(filename.c_str(), "w");
+
+  BitwuzlaSort *bv1 = bitwuzla_mk_bv_sort(d_bzla, 1);
+  BitwuzlaSort *fn1_1 = bitwuzla_mk_fun_sort(d_bzla, 1, &bv1, bv1);
+  BitwuzlaTerm *f = bitwuzla_mk_const(d_bzla, fn1_1, "f");
+  bitwuzla_term_dump(f, "smt2", tmpfile);
+  fclose(tmpfile);
+
+  std::ifstream ifs(filename);
+  std::string content((std::istreambuf_iterator<char>(ifs)),
+                      (std::istreambuf_iterator<char>()));
+  unlink(filename.c_str());
+
+  ASSERT_EQ("(declare-fun f ((_ BitVec 1)) (_ BitVec 1))\n", content);
+}
+
+TEST_F(TestApi, term_dump3)
+{
+  std::string filename = "term_dump3.out";
+  FILE *tmpfile        = fopen(filename.c_str(), "w");
+
+  BitwuzlaSort *bv1   = bitwuzla_mk_bv_sort(d_bzla, 1);
+  BitwuzlaSort *ar1_1 = bitwuzla_mk_array_sort(d_bzla, bv1, bv1);
+  BitwuzlaTerm *a     = bitwuzla_mk_const(d_bzla, ar1_1, "a");
+  bitwuzla_term_dump(a, "smt2", tmpfile);
+  fclose(tmpfile);
+
+  std::ifstream ifs(filename);
+  std::string content((std::istreambuf_iterator<char>(ifs)),
+                      (std::istreambuf_iterator<char>()));
+  unlink(filename.c_str());
+
+  ASSERT_EQ("(declare-const a (Array (_ BitVec 1) (_ BitVec 1)))\n", content);
+}
+
+TEST_F(TestApi, dump_formula2)
+{
+  std::string filename = "formula_dump2.out";
+  FILE *tmpfile        = fopen(filename.c_str(), "w");
+
+  bitwuzla_set_option(d_bzla, BITWUZLA_OPT_PRETTY_PRINT, 0);
+  BitwuzlaSort *bv1   = bitwuzla_mk_bv_sort(d_bzla, 1);
+  BitwuzlaSort *ar1_1 = bitwuzla_mk_array_sort(d_bzla, bv1, bv1);
+  BitwuzlaTerm *a     = bitwuzla_mk_const(d_bzla, ar1_1, "a");
+  BitwuzlaTerm *b     = bitwuzla_mk_const(d_bzla, ar1_1, "b");
+  BitwuzlaTerm *z     = bitwuzla_mk_false(d_bzla);
+  BitwuzlaTerm *e = bitwuzla_mk_term2(d_bzla, BITWUZLA_KIND_ARRAY_SELECT, a, z);
+  BitwuzlaTerm *c = bitwuzla_mk_term2(d_bzla, BITWUZLA_KIND_EQUAL, a, b);
+  bitwuzla_assert(d_bzla, e);
+  bitwuzla_assert(d_bzla, c);
+  bitwuzla_dump_formula(d_bzla, "smt2", tmpfile);
+  fclose(tmpfile);
+
+  std::ifstream ifs(filename);
+  std::string content((std::istreambuf_iterator<char>(ifs)),
+                      (std::istreambuf_iterator<char>()));
+  unlink(filename.c_str());
+
+  ASSERT_EQ(
+      "(set-logic QF_ABV)\n"
+      "(declare-const a (Array (_ BitVec 1) (_ BitVec 1)))\n"
+      "(declare-const b (Array (_ BitVec 1) (_ BitVec 1)))\n"
+      "(assert (= (select a #b0) #b1))\n"
+      "(assert (= a b))\n"
+      "(check-sat)\n"
+      "(exit)\n",
+      content);
 }
