@@ -14,7 +14,7 @@ C API Documentation
 Quickstart
 ----------
 
-First, create a Bitwuzla instance:
+First, create a :c:struct:`Bitwuzla` instance:
 
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
@@ -41,7 +41,7 @@ For more details on available options, see :ref:`c/options:options`.
 Next, you will want to create some expressions and assert formulas.
 For example, consider the following SMT-LIB input:
 
-.. literalinclude:: ../../examples/c/quickstart.smt2
+.. literalinclude:: ../../examples/smt2/quickstart.smt2
      :language: smtlib
 
 This input is created and asserted as follows:
@@ -75,7 +75,8 @@ For example, to parse an input file `example.smt2` in SMT-LIB format:
   If the input is given in SMT-LIB format, commands like :code:`check-sat`
   or :code:`get-value` will be executed while parsing.
 
-If incremental usage is enabled (option :c:enum:`BITWUZLA_OPT_INCREMENTAL`),
+If incremental usage is enabled (option
+:c:enum:`BitwuzlaOption.BITWUZLA_OPT_INCREMENTAL`),
 formulas can also be assumed via :c:func:`bitwuzla_assume()`.
 After parsing an input file and/or asserting and assuming formulas,
 satisfiability can be determined via :c:func:`bitwuzla_check_sat()`.
@@ -98,7 +99,7 @@ resulting model can be printed via :c:func:`bitwuzla_print_model()`.
      :lines: 58-59
 
 This will output a possible model (default: in SMT-LIB format, configurable
-via option :c:enum:`BITWUZLA_OPT_OUTPUT_FORMAT`) as follows:
+via option :c:enum:`BitwuzlaOption.BITWUZLA_OPT_OUTPUT_FORMAT`) as follows:
 
 .. code-block:: smtlib
 
@@ -132,7 +133,7 @@ occur in the input formula.
 
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
-     :lines: 84-86
+     :lines: 83-85
 
 This will print:
 
@@ -144,7 +145,7 @@ Finally, we delete the Bitwuzla instance.
 
 .. literalinclude:: ../../examples/c/quickstart.c
      :language: c
-     :lines: 89
+     :lines: 88
 
 
 Examples
@@ -158,28 +159,24 @@ Quickstart Example
 
 The example used in the :ref:`c/api:quickstart` guide.
 
-| The SMT-LIB input for this example can be found at `examples/c/quickstart.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/quickstart.smt2>`_.
+| The SMT-LIB input for this example can be found at `examples/smt2/quickstart.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/smt2/quickstart.smt2>`_.
 | The source code for this example can be found at `examples/c/quickstart.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/quickstart.c>`_.
 
-.. literalinclude:: ../../examples/c/quickstart.smt2
-     :language: smtlib
-
-.. literalinclude:: ../../examples/c/quickstart.c
-     :language: c
+.. tabbed-examples::
+  ../../examples/smt2/quickstart.smt2
+  ../../examples/c/quickstart.c
 
 Incremental Example with push and pop
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 An incremental example with :code:`push` and :code:`pop`.
 
-| The SMT-LIB input for this example can be found at `examples/c/pushpop.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/pushpop.smt2>`_.
+| The SMT-LIB input for this example can be found at `examples/smt2/pushpop.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/smt2/pushpop.smt2>`_.
 | The source code for this example can be found at `examples/c/pushpop.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/pushpop.c>`_.
 
-.. literalinclude:: ../../examples/c/pushpop.smt2
-     :language: smtlib
-
-.. literalinclude:: ../../examples/c/pushpop.c
-     :language: c
+.. tabbed-examples::
+  ../../examples/smt2/pushpop.smt2
+  ../../examples/c/pushpop.c
 
 Incremental Example with check-sat-assuming
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -189,14 +186,12 @@ This example shows how to implement the example above with
 Note that Bitwuzla requires to first assume formulas (the assumptions in the :code:`check-sat-assuming` list) with :c:func:`bitwuzla_assume()` before calling :c:func:`bitwuzla_check_sat()`.
 All active assumptions are inactivated after the check sat call.
 
-| The SMT-LIB input for this example can be found at `examples/c/checksatassuming.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/checksatassuming.smt2>`_.
+| The SMT-LIB input for this example can be found at `examples/smt2/checksatassuming.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/smt2/checksatassuming.smt2>`_.
 | The source code for this example can be found at `examples/c/checksatassuming.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/checksatassuming.c>`_.
 
-.. literalinclude:: ../../examples/c/checksatassuming.smt2
-     :language: smtlib
-
-.. literalinclude:: ../../examples/c/checksatassuming.c
-     :language: c
+.. tabbed-examples::
+  ../../examples/smt2/checksatassuming.smt2
+  ../../examples/c/checksatassuming.c
 
 Unsat Core Example
 ^^^^^^^^^^^^^^^^^^
@@ -205,15 +200,13 @@ This example shows how to extract an unsat core.
 It creates bit-vector and floating-point terms and further illustrates how to
 create lambda terms (:code:`define-fun`).
 
-| The SMT-LIB input for this example can be found at `examples/c/unsatcore.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatcore.smt2>`_.
+| The SMT-LIB input for this example can be found at `examples/smt2/unsatcore.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/smt2/unsatcore.smt2>`_.
 | The source code for this example can be found at `examples/c/unsatcore.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatcore.c>`_.
 
 
-.. literalinclude:: ../../examples/c/unsatcore.smt2
-     :language: smtlib
-
-.. literalinclude:: ../../examples/c/unsatcore.c
-     :language: c
+.. tabbed-examples::
+  ../../examples/smt2/unsatcore.smt2
+  ../../examples/c/unsatcore.c
 
 Unsat Assumptions Example
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -221,12 +214,10 @@ Unsat Assumptions Example
 This example shows how to implement the example above with
 :code:`get-unsat-assumptions`.
 
-| The SMT-LIB input for this example can be found at `examples/c/unsatassumptions.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatassumptions.smt2>`_.
+| The SMT-LIB input for this example can be found at `examples/smt2/unsatassumptions.smt2 <https://github.com/bitwuzla/bitwuzla/tree/main/examples/smt2/unsatassumptions.smt2>`_.
 | The source code for this example can be found at `examples/c/unsatassumptions.c <https://github.com/bitwuzla/bitwuzla/tree/main/examples/c/unsatassumptions.c>`_.
 
 
-.. literalinclude:: ../../examples/c/unsatassumptions.smt2
-     :language: smtlib
-
-.. literalinclude:: ../../examples/c/unsatassumptions.c
-     :language: c
+.. tabbed-examples::
+   ../../examples/smt2/unsatassumptions.smt2
+   ../../examples/c/unsatassumptions.c
