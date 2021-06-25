@@ -262,6 +262,32 @@ add_rho_to_model(Bzla *bzla,
   }
 }
 
+/**
+ * Copy model of `fun_with_model` to the model of `fun.
+ */
+static void
+merge_fun_models(Bzla *bzla,
+                 BzlaNode *fun,
+                 BzlaNode *fun_with_model,
+                 BzlaIntHashTable *fun_model)
+{
+  BzlaBitVectorTuple *t;
+  BzlaBitVector *bv_value;
+  BzlaPtrHashTableIterator it;
+  BzlaHashTableData *d;
+
+  d = bzla_hashint_map_get(fun_model, fun_with_model->id);
+  assert(d);
+  const BzlaPtrHashTable *model = d->as_ptr;
+  bzla_iter_hashptr_init(&it, model);
+  while (bzla_iter_hashptr_has_next(&it))
+  {
+    bv_value = it.bucket->data.as_ptr;
+    t        = bzla_iter_hashptr_next(&it);
+    add_to_fun_model(bzla, fun_model, fun, t, bv_value);
+  }
+}
+
 static void
 recursively_compute_function_model(Bzla *bzla,
                                    BzlaIntHashTable *bv_model,
@@ -289,12 +315,22 @@ recursively_compute_function_model(Bzla *bzla,
   {
     assert(bzla_node_is_fun(cur_fun));
 
+    if (bzla_hashint_map_contains(fun_model, cur_fun->id))
+    {
+      merge_fun_models(bzla, fun, cur_fun, fun_model);
+      break;
+    }
+
     if (cur_fun->rho)
+    {
       add_rho_to_model(bzla, fun, cur_fun->rho, bv_model, fun_model);
+    }
 
     if (bzla_node_is_lambda(cur_fun)
         && (static_rho = bzla_node_lambda_get_static_rho(cur_fun)))
+    {
       add_rho_to_model(bzla, fun, static_rho, bv_model, fun_model);
+    }
 
     if (bzla_node_is_lambda(cur_fun))
     {
@@ -562,6 +598,100 @@ bzla_model_get_fun_model(Bzla *bzla,
 
 /*------------------------------------------------------------------------*/
 
+/**
+ * Compute the bit-vector value for `exp`.
+ *
+ * Requires that the model values of the childen of `exp` already have been
+ * computed (no traversal).
+ */
+static void
+compute_bv_value(Bzla *bzla, BzlaIntHashTable *bv_model, BzlaNode *exp)
+{
+  assert(!bzla_node_is_apply(exp));
+  assert(!bzla_node_is_lambda(exp));
+  assert(!bzla_node_is_uf(exp));
+  assert(!bzla_node_is_update(exp));
+
+  BzlaMemMgr *mm;
+  BzlaNode *real_exp, *child;
+  BzlaBitVector *bv[3], *result = 0;
+  BzlaHashTableData *d;
+
+  mm       = bzla->mm;
+  real_exp = bzla_node_real_addr(exp);
+
+  d = bzla_hashint_map_get(bv_model, real_exp->id);
+  if (d)
+  {
+    return;
+  }
+
+  if (bzla_node_is_bv_var(real_exp) || bzla_node_is_fun_eq(real_exp))
+  {
+    result = bzla_model_get_bv_assignment(
+        bzla, bzla_node_get_simplified(bzla, real_exp));
+  }
+  /* if fp var is not synthesized (i.e., does not occur in the formula and
+   * is thus not word-blasted), add default bit-vector assignment 0 */
+  else if (bzla_node_is_fp_var(real_exp) && !real_exp->av)
+  {
+    result = bzla_bv_new(
+        bzla->mm,
+        bzla_sort_fp_get_bv_width(bzla, bzla_node_get_sort_id(real_exp)));
+  }
+  else if (bzla_node_is_bv_const(real_exp))
+  {
+    result = bzla_bv_copy(mm, bzla_node_bv_const_get_bits(real_exp));
+  }
+  else
+  {
+    for (size_t i = 0; i < real_exp->arity; ++i)
+    {
+      child = real_exp->e[i];
+      d     = bzla_hashint_map_get(bv_model, bzla_node_real_addr(child)->id);
+      assert(d);
+      bv[i] = bzla_node_is_inverted(child) ? bzla_bv_not(mm, d->as_ptr)
+                                           : bzla_bv_copy(mm, d->as_ptr);
+    }
+
+    switch (real_exp->kind)
+    {
+      case BZLA_BV_SLICE_NODE:
+        result = bzla_bv_slice(mm,
+                               bv[0],
+                               bzla_node_bv_slice_get_upper(real_exp),
+                               bzla_node_bv_slice_get_lower(real_exp));
+        break;
+      case BZLA_BV_AND_NODE: result = bzla_bv_and(mm, bv[0], bv[1]); break;
+      case BZLA_BV_EQ_NODE: result = bzla_bv_eq(mm, bv[0], bv[1]); break;
+      case BZLA_BV_ADD_NODE: result = bzla_bv_add(mm, bv[0], bv[1]); break;
+      case BZLA_BV_MUL_NODE: result = bzla_bv_mul(mm, bv[0], bv[1]); break;
+      case BZLA_BV_ULT_NODE: result = bzla_bv_ult(mm, bv[0], bv[1]); break;
+      case BZLA_BV_SLL_NODE: result = bzla_bv_sll(mm, bv[0], bv[1]); break;
+      case BZLA_BV_SLT_NODE: result = bzla_bv_slt(mm, bv[0], bv[1]); break;
+      case BZLA_BV_SRL_NODE: result = bzla_bv_srl(mm, bv[0], bv[1]); break;
+      case BZLA_BV_UDIV_NODE: result = bzla_bv_udiv(mm, bv[0], bv[1]); break;
+      case BZLA_BV_UREM_NODE: result = bzla_bv_urem(mm, bv[0], bv[1]); break;
+      case BZLA_BV_CONCAT_NODE:
+        result = bzla_bv_concat(mm, bv[0], bv[1]);
+        break;
+      default:
+        assert(bzla_node_is_cond(real_exp));
+        result = bzla_bv_is_true(bv[0]) ? bzla_bv_copy(mm, bv[1])
+                                        : bzla_bv_copy(mm, bv[2]);
+    }
+
+    for (size_t i = 0; i < real_exp->arity; ++i)
+    {
+      bzla_bv_free(mm, bv[i]);
+    }
+  }
+  assert(result);
+
+  bzla_model_add_to_bv(bzla, bv_model, real_exp, result);
+  bzla_bv_free(mm, result);
+}
+
 static void
 compute_model_values(Bzla *bzla,
                      BzlaIntHashTable *bv_model,
@@ -584,12 +714,19 @@ compute_model_values(Bzla *bzla,
     assert(!cur->parameterized);
     BZLALOG(3, "generate model for %s", bzla_util_node2string(cur));
     if (bzla_node_is_fun(cur))
+    {
       recursively_compute_function_model(bzla, bv_model, fun_model, cur);
-    else
+    }
+    else if (bzla_node_is_apply(cur)
+             || bzla_node_fp_needs_word_blast(bzla, cur))
     {
       bv = bzla_model_recursively_compute_assignment(
           bzla, bv_model, fun_model, cur);
       bzla_bv_free(bzla->mm, bv);
+    }
+    else
+    {
+      compute_bv_value(bzla, bv_model, cur);
     }
   }
 }
@@ -970,6 +1107,17 @@ bzla_model_recursively_compute_assignment(Bzla *bzla,
   BzlaHashTableData *md;
 
   mm = bzla->mm;
+
+  /* Return model value if already computed. */
+  d = bzla_hashint_map_get(bv_model, bzla_node_real_addr(exp)->id);
+  if (d)
+  {
+    if (bzla_node_is_inverted(exp))
+    {
+      return bzla_bv_not(mm, d->as_ptr);
+    }
+    return bzla_bv_copy(mm, d->as_ptr);
+  }
 
   assigned = bzla_hashint_map_new(mm);
   expanded = bzla_hashint_table_new(mm);
