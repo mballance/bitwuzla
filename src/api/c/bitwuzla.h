@@ -3101,10 +3101,10 @@ const char *bitwuzla_get_rm_value(Bitwuzla *bitwuzla, const BitwuzlaTerm *term);
  */
 void bitwuzla_get_array_value(Bitwuzla *bitwuzla,
                               const BitwuzlaTerm *term,
-                              BitwuzlaTerm ***indices,
-                              BitwuzlaTerm ***values,
+                              const BitwuzlaTerm ***indices,
+                              const BitwuzlaTerm ***values,
                               size_t *size,
-                              BitwuzlaTerm **default_value);
+                              const BitwuzlaTerm **default_value);
 
 /**
  * Get the current model value of given function term.
@@ -3142,9 +3142,9 @@ void bitwuzla_get_array_value(Bitwuzla *bitwuzla,
  */
 void bitwuzla_get_fun_value(Bitwuzla *bitwuzla,
                             const BitwuzlaTerm *term,
-                            BitwuzlaTerm ****args,
+                            const BitwuzlaTerm ****args,
                             size_t *arity,
-                            BitwuzlaTerm ***values,
+                            const BitwuzlaTerm ***values,
                             size_t *size);
 
 /**

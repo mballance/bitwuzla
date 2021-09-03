@@ -2579,7 +2579,8 @@ TEST_F(TestApi, get_array_value)
   bitwuzla_check_sat(d_bzla);
 
   size_t size;
-  BitwuzlaTerm **indices, **values, *default_value;
+  const BitwuzlaTerm **indices, **values;
+  const BitwuzlaTerm *default_value;
   bitwuzla_get_array_value(
       d_bzla, stores, &indices, &values, &size, &default_value);
 
@@ -2626,7 +2627,7 @@ TEST_F(TestApi, get_fun_value)
   bitwuzla_check_sat(d_bzla);
 
   size_t size, arity;
-  BitwuzlaTerm ***args, **values;
+  const BitwuzlaTerm ***args, **values;
   bitwuzla_get_fun_value(d_bzla, f, &args, &arity, &values, &size);
 
   ASSERT_EQ(size, 1);
@@ -2662,7 +2663,7 @@ TEST_F(TestApi, get_fun_value2)
   bitwuzla_assert(d_bzla, c1);
   bitwuzla_check_sat(d_bzla);
 
-  BitwuzlaTerm ***args, **values;
+  const BitwuzlaTerm ***args, **values;
   size_t arity, size;
   bitwuzla_get_fun_value(d_bzla, a, &args, &arity, &values, &size);
   for (size_t i = 0; i < size; i += 1)
