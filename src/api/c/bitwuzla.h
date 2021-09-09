@@ -3358,8 +3358,8 @@ BitwuzlaSort *bitwuzla_sort_array_get_element(const BitwuzlaSort *sort);
  *
  * @return The domain sorts of the function sort.
  */
-BitwuzlaSort **bitwuzla_sort_fun_get_domain_sorts(const BitwuzlaSort *sort,
-                                                  size_t *size);
+const BitwuzlaSort **bitwuzla_sort_fun_get_domain_sorts(
+    const BitwuzlaSort *sort, size_t *size);
 
 /**
  * Get the codomain sort of a function sort.
@@ -3562,8 +3562,8 @@ BitwuzlaSort *bitwuzla_term_array_get_element_sort(const BitwuzlaTerm *term);
  *
  * @return The domain sorts of the function term.
  */
-BitwuzlaSort **bitwuzla_term_fun_get_domain_sorts(const BitwuzlaTerm *term,
-                                                  size_t *size);
+const BitwuzlaSort **bitwuzla_term_fun_get_domain_sorts(
+    const BitwuzlaTerm *term, size_t *size);
 
 /**
  * Get the codomain sort of a function term.
@@ -3636,7 +3636,7 @@ const char *bitwuzla_term_get_symbol(const BitwuzlaTerm *term);
  * @param term The term.
  * @param symbol The symbol.
  */
-void bitwuzla_term_set_symbol(BitwuzlaTerm *term, const char *symbol);
+void bitwuzla_term_set_symbol(const BitwuzlaTerm *term, const char *symbol);
 
 /**
  * Determine if the sorts of two terms are equal.
