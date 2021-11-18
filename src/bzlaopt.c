@@ -219,6 +219,11 @@ bzla_opt_init_opts(Bzla *bzla)
       bzla->mm, (BzlaHashPtr) bzla_hash_str, (BzlaCmpPtr) strcmpoptval);
   add_opt_help(mm,
                opts,
+               "none",
+               BZLA_OUTPUT_FORMAT_NONE,
+               "auto-detect based on input format");
+  add_opt_help(mm,
+               opts,
                "btor",
                BZLA_OUTPUT_FORMAT_BTOR,
                "use BTOR as output file format");
@@ -1026,7 +1031,7 @@ bzla_opt_init_opts(Bzla *bzla)
   add_opt_help(mm,
                opts,
                "last",
-               BZLA_PROP_ENTAILED_FIRST,
+               BZLA_PROP_ENTAILED_LAST,
                "process only the last entailed propagation");
   bzla->options[BZLA_OPT_PROP_ENTAILED].options = opts;
   init_opt(bzla,
