@@ -3,7 +3,7 @@
  *
  * This file is part of Bitwuzla.
  *
- * Copyright (C) 2007-2021 by the authors listed in the AUTHORS file.
+ * Copyright (C) 2007-2022 by the authors listed in the AUTHORS file.
  *
  * See COPYING for more information on using this software.
  */
@@ -885,7 +885,7 @@ print_opt_help(BitwuzlaMainApp *app,
   "Note that all of the following options can also be set via env. variables " \
   "of"                                                                         \
   "\n"                                                                         \
-  "the form 'BTOR<capitalized long name without '-' and ':'>=<int>'."          \
+  "the form 'BZLA<capitalized long name without '-' and ':'>=<int>'."          \
   "\n\n"
 
 static void
