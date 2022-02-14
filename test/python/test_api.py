@@ -111,16 +111,131 @@ def test_get_value(bzla):
     # TODO
     pass
 
+def test_get_value_str_bv(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    x = bzla.mk_const(env.bv8)
+    y = bzla.mk_const(env.bv8)
+    ones = bzla.mk_bv_ones(env.bv8)
+    mins = bzla.mk_bv_min_signed(env.bv8)
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL, [x, ones]))
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL, [y, mins]))
+    bzla.check_sat()
+    assert bzla.get_value_str(x) == "1" * 8
+    assert bzla.get_value_str(y) == "1" + "0" * 7
 
-def test_print_model(bzla):
-    # TODO
-    pass
+def test_get_value_str_fp(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    x = bzla.mk_const(env.fp16)
+    pinf = bzla.mk_fp_pos_inf(env.fp16)
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL, [x, pinf]))
+    bzla.check_sat()
+    assert bzla.get_value_str(x) == ("0", "1" * 5, "0" * 10)
 
+def test_get_value_str_rm(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    x = bzla.mk_const(bzla.mk_rm_sort())
+    rna = bzla.mk_rm_value(RoundingMode.RNA)
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL, [x, rna]))
+    bzla.check_sat()
+    assert bzla.get_value_str(x) == "RNA"
 
-def test_dump_formula(bzla):
-    # TODO
-    pass
+def test_get_value_str_array(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    a = bzla.mk_const(bzla.mk_array_sort(env.bv8, env.bv32))
+    s1 = bzla.mk_term(Kind.ARRAY_SELECT, [a, bzla.mk_bv_ones(env.bv8)])
+    s2 = bzla.mk_term(Kind.ARRAY_SELECT, [a, bzla.mk_bv_min_signed(env.bv8)])
+    bzla.assert_formula(bzla.mk_term(Kind.DISTINCT, [s1, s2]))
+    bzla.check_sat()
+    val = bzla.get_value_str(a)
+    assert len(val) == 2
+    assert "11111111" in val
+    assert "10000000" in val
+    assert val["11111111"] != val["10000000"]
 
+def test_get_value_str_array_const(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    bzla.set_option(Option.RW_LEVEL, 0)
+    zero = bzla.mk_bv_value(env.bv32, 0)
+    a = bzla.mk_const_array(bzla.mk_array_sort(env.bv8, env.bv32), zero)
+    b = bzla.mk_term(Kind.ARRAY_STORE,
+                     [a,
+                      bzla.mk_bv_value(env.bv8, 0),
+                      bzla.mk_bv_min_signed(env.bv32)])
+    bzla.check_sat()
+    val = bzla.get_value_str(b)
+    assert len(val) == 1
+    assert "00000000" in val
+    assert val["00000000"] == "10000000000000000000000000000000"
+    # Default value is zero due to const array
+    assert val["11111111"] == "0" * 32
+
+def test_get_value_str_fun(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    s = bzla.mk_fun_sort([env.bv8, env.bv32], env.fp16)
+    f = bzla.mk_const(s)
+    args1 = [f, bzla.mk_const(env.bv8), bzla.mk_const(env.bv32)]
+    args2 = [f, bzla.mk_const(env.bv8), bzla.mk_const(env.bv32)]
+    app1 = bzla.mk_term(Kind.APPLY, args1)
+    app2 = bzla.mk_term(Kind.APPLY, args2)
+    bzla.assert_formula(bzla.mk_term(Kind.DISTINCT, [app1, app2]))
+    bzla.assert_formula(bzla.mk_term(Kind.DISTINCT, [args1[1], args2[1]]))
+    bzla.assert_formula(bzla.mk_term(Kind.DISTINCT, [args1[2], args2[2]]))
+    bzla.check_sat()
+    val = bzla.get_value_str(f)
+    assert len(val) == 2
+    for args, value in val.items():
+        assert isinstance(args, tuple)
+        assert len(args) == 2
+        assert len(value) == 3 # FP value
+
+def test_get_model(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    x = bzla.mk_const(env.bv8, "x")
+    y = bzla.mk_const(env.fp16, "y")
+    rm = bzla.mk_const(bzla.mk_rm_sort(), "rm")
+    ones = bzla.mk_bv_ones(env.bv8)
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL, [x, ones]))
+    bzla.assert_formula(bzla.mk_term(Kind.FP_IS_NAN, [y]))
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL,
+                                     [rm, bzla.mk_rm_value(RoundingMode.RNA)]))
+    bzla.check_sat()
+    assert bzla.get_model() == """(
+  (define-fun x () (_ BitVec 8) #b11111111)
+  (define-fun y () (_ FloatingPoint 5 11) (fp #b0 #b11111 #b1000000000))
+  (define-fun rm () RoundingMode RNA)
+)"""
+    assert bzla.get_model("btor") == """2 11111111 x
+3 0111111000000000 y
+4 000 rm"""
+
+def test_dump_formula(env):
+    bzla = env.bzla
+    bzla.set_option(Option.PRODUCE_MODELS, 1)
+    bzla.set_option(Option.PRETTY_PRINT, 0)
+    x = bzla.mk_const(env.bv8, "x")
+    y = bzla.mk_const(env.fp16, "y")
+    rm = bzla.mk_const(bzla.mk_rm_sort(), "rm")
+    ones = bzla.mk_bv_ones(env.bv8)
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL, [x, ones]))
+    bzla.assert_formula(bzla.mk_term(Kind.FP_IS_NAN, [y]))
+    bzla.assert_formula(bzla.mk_term(Kind.EQUAL,
+                                     [rm, bzla.mk_rm_value(RoundingMode.RNA)]))
+    assert bzla.dump_formula() == """(set-logic QF_BVFP)
+(declare-const x (_ BitVec 8))
+(declare-const y (_ FloatingPoint 5 11))
+(declare-const rm RoundingMode)
+(assert (= x #b11111111))
+(assert (fp.isNaN y))
+(assert (= rm RNA))
+(check-sat)
+(exit)"""
 
 def test_assume_formula(bzla):
     # TODO
@@ -160,6 +275,8 @@ def test_get_option(bzla):
     assert bzla.get_option(Option.INCREMENTAL)
     bzla.set_option(Option.INCREMENTAL, False)
     assert not bzla.get_option(Option.INCREMENTAL)
+    bzla.set_option(Option.SAT_ENGINE, "cadical")
+    assert bzla.get_option(Option.SAT_ENGINE) == "cadical"
 
 
 def test_mk_bool_sort(bzla):
@@ -400,4 +517,10 @@ def test_substitute(env):
 # TODO
 
 # BitwuzlaTerm tests
-# TODO
+
+def test_term_dump(env):
+    x = env.bzla.mk_var(env.bv32, "x")
+    assert x.dump() == "x"
+    y = env.bzla.mk_var(env.bv32, "y")
+    add = env.bzla.mk_term(Kind.BV_ADD, [x, y])
+    assert add.dump() == "(bvadd x y)"
