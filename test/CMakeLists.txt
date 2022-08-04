@@ -973,6 +973,7 @@ set(cmp_testcases
 "getvalue1.smt2"
 "getvalue2.smt2"
 "getvalue3.smt2"
+"issue32.smt2 -i"
 "normalize_add_incomplete.btor -db"
 "normalize_and_incomplete.btor -db"
 "normalize_mul_incomplete.btor -db"
@@ -1244,6 +1245,7 @@ if(SymFPU_FOUND)
     "fp_regr9.smt2"
     "fp_real.smt2"
     "fp_rational.smt2"
+    "getvalue.smt2"
   )
 endif()
 
