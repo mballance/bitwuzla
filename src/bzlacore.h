@@ -74,6 +74,7 @@ struct Bzla
 
   BzlaMemMgr *mm;
   BzlaSolver *slv;
+  BzlaSolver *qslv;
   BzlaCallbacks cbs;
 
   BzlaBVAssList *bv_assignments;
@@ -95,8 +96,6 @@ struct Bzla
   BzlaPtrHashTable *ufs;
   BzlaPtrHashTable *lambdas;
   BzlaPtrHashTable *quantifiers;
-  BzlaPtrHashTable *exists_vars;
-  BzlaPtrHashTable *forall_vars;
   BzlaPtrHashTable *feqs;
   BzlaPtrHashTable *parameterized;
 
@@ -270,6 +269,9 @@ void bzla_fixate_assumptions(Bzla *bzla);
 
 /* Resets assumptions */
 void bzla_reset_assumptions(Bzla *bzla);
+
+/* Resets current function models. */
+void bzla_reset_functions_with_model(Bzla *bzla);
 
 /* Solves instance, but with lemmas on demand limit 'lod_limit' and conflict
  * limit for the underlying SAT solver 'sat_limit'. */

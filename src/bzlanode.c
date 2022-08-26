@@ -1541,7 +1541,7 @@ bzla_node_bv_const_set_invbits(BzlaNode *exp, BzlaBitVector *bits)
 /*------------------------------------------------------------------------*/
 
 BzlaRoundingMode
-bzla_node_rm_const_get_rm(BzlaNode *exp)
+bzla_node_rm_const_get_rm(const BzlaNode *exp)
 {
   assert(exp);
   assert(bzla_node_is_rm_const(exp));
@@ -1703,29 +1703,6 @@ bzla_node_param_set_binder(BzlaNode *param, BzlaNode *binder)
 {
   assert(bzla_node_is_param(param));
   assert(!binder || bzla_node_is_binder(binder));
-
-  BzlaNode *q;
-
-  /* param is not bound anymore, remove from exists/forall vars tables */
-  if (!binder)
-  {
-    q = bzla_node_param_get_binder(param);
-    if (q)
-    {
-      if (bzla_node_is_exists(q))
-        bzla_hashptr_table_remove(param->bzla->exists_vars, param, 0, 0);
-      else if (bzla_node_is_forall(q))
-        bzla_hashptr_table_remove(param->bzla->forall_vars, param, 0, 0);
-    }
-  }
-  /* param is bound, add to exists/forall vars tables */
-  else
-  {
-    if (bzla_node_is_exists(binder))
-      (void) bzla_hashptr_table_add(param->bzla->exists_vars, param);
-    else if (bzla_node_is_forall(binder))
-      (void) bzla_hashptr_table_add(param->bzla->forall_vars, param);
-  }
   ((BzlaParamNode *) bzla_node_real_addr(param))->binder = binder;
 }
 
@@ -2120,7 +2097,7 @@ compare_binder_exp(Bzla *bzla,
 
   int32_t i, equal = 0;
   BzlaMemMgr *mm;
-  BzlaNode *cur, *real_cur, *result, *subst_param, **e, *b0, *b1;
+  BzlaNode *cur, *real_cur, *result, *subst_param, **e, *b0, *b1, *binder_body;
   BzlaPtrHashTable *cache, *param_map;
   BzlaPtrHashBucket *b, *bb;
   BzlaNodePtrStack stack, args;
@@ -2132,9 +2109,12 @@ compare_binder_exp(Bzla *bzla,
 
   if (bzla_node_get_sort_id(subst_param) != bzla_node_get_sort_id(param)
       || bzla_node_get_sort_id(body) != bzla_node_get_sort_id(binder->e[1]))
+  {
     return 0;
+  }
 
   cache = bzla_hashptr_table_new(mm, 0, 0);
+  binder_body = bzla_node_binder_get_body(binder);
 
   /* create param map */
   param_map = bzla_hashptr_table_new(mm, 0, 0);
@@ -2156,16 +2136,18 @@ compare_binder_exp(Bzla *bzla,
   {
     bzla_iter_binder_init(&it, bzla_node_real_addr(body));
     bzla_iter_binder_init(&iit, bzla_node_real_addr(binder->e[1]));
-    while (bzla_iter_binder_has_next(&it))
+    while (bzla_iter_binder_has_next_inverted(&it))
     {
-      if (!bzla_iter_binder_has_next(&iit)) goto NOT_EQUAL;
+      if (!bzla_iter_binder_has_next_inverted(&iit)) goto NOT_EQUAL;
 
-      b0 = bzla_iter_binder_next(&it);
-      b1 = bzla_iter_binder_next(&iit);
+      b0 = bzla_node_real_addr(bzla_iter_binder_next(&it));
+      b1 = bzla_node_real_addr(bzla_iter_binder_next(&iit));
 
       if (bzla_node_get_sort_id(b0) != bzla_node_get_sort_id(b1)
           || b0->kind != b1->kind)
+      {
         goto NOT_EQUAL;
+      }
 
       param       = b0->e[0];
       subst_param = b1->e[0];
@@ -2175,14 +2157,20 @@ compare_binder_exp(Bzla *bzla,
       assert(bzla_node_is_param(subst_param));
 
       if (bzla_node_get_sort_id(param) != bzla_node_get_sort_id(subst_param))
+      {
         goto NOT_EQUAL;
+      }
 
       bzla_hashptr_table_add(param_map, param)->data.as_ptr = subst_param;
+
+      body = bzla_node_binder_get_body(b0);
+      binder_body = bzla_node_binder_get_body(b1);
     }
-    body = bzla_node_binder_get_body(bzla_node_real_addr(body));
   }
   else if (bzla_node_is_binder(body) || bzla_node_is_binder(binder->e[1]))
+  {
     goto NOT_EQUAL;
+  }
 
   BZLA_INIT_STACK(mm, args);
   BZLA_INIT_STACK(mm, stack);
@@ -2323,7 +2311,9 @@ compare_binder_exp(Bzla *bzla,
   assert(BZLA_COUNT_STACK(args) <= 1);
 
   if (!BZLA_EMPTY_STACK(args))
-    equal = BZLA_TOP_STACK(args) == bzla_node_binder_get_body(binder);
+  {
+    equal = BZLA_TOP_STACK(args) == binder_body;
+  }
 
   BZLA_RELEASE_STACK(stack);
   BZLA_RELEASE_STACK(args);
@@ -3090,42 +3080,11 @@ bzla_node_create_cond(Bzla *bzla,
                       BzlaNode *e_if,
                       BzlaNode *e_else)
 {
-  uint32_t i, arity;
-  BzlaNode *e[3], *cond, *lambda;
-  BzlaNodePtrStack params;
-  BzlaSort *sort;
+  BzlaNode *e[3];
   e[0] = bzla_simplify_exp(bzla, e_cond);
   e[1] = bzla_simplify_exp(bzla, e_if);
   e[2] = bzla_simplify_exp(bzla, e_else);
   assert(bzla_dbg_precond_cond_exp(bzla, e[0], e[1], e[2]));
-
-  /* represent parameterized function conditionals (with parameterized
-   * functions) as parameterized function
-   * -> gets beta reduced in bzla_node_create_apply */
-  if (bzla_node_is_fun(e[1]) && (e[1]->parameterized || e[2]->parameterized))
-  {
-    BZLA_INIT_STACK(bzla->mm, params);
-    assert(bzla_sort_is_fun(bzla, bzla_node_get_sort_id(e[1])));
-    arity = bzla_node_fun_get_arity(bzla, e[1]);
-    sort  = bzla_sort_get_by_id(bzla, bzla_node_get_sort_id(e[1]));
-    assert(sort->fun.domain->kind == BZLA_TUPLE_SORT);
-    assert(sort->fun.domain->tuple.num_elements == arity);
-    for (i = 0; i < arity; i++)
-      BZLA_PUSH_STACK(
-          params,
-          bzla_exp_param(bzla, sort->fun.domain->tuple.elements[i]->id, 0));
-    e[1]   = bzla_exp_apply_n(bzla, e[1], params.start, arity);
-    e[2]   = bzla_exp_apply_n(bzla, e[2], params.start, arity);
-    cond   = create_exp(bzla, BZLA_COND_NODE, 3, e);
-    lambda = bzla_exp_fun(bzla, params.start, arity, cond);
-    while (!BZLA_EMPTY_STACK(params))
-      bzla_node_release(bzla, BZLA_POP_STACK(params));
-    bzla_node_release(bzla, e[1]);
-    bzla_node_release(bzla, e[2]);
-    bzla_node_release(bzla, cond);
-    BZLA_RELEASE_STACK(params);
-    return lambda;
-  }
   return create_exp(bzla, BZLA_COND_NODE, 3, e);
 }
 
@@ -3214,7 +3173,7 @@ bzla_node_create_apply(Bzla *bzla, BzlaNode *fun, BzlaNode *args)
 
   assert(bzla_node_is_regular(e[0]));
   assert(bzla_node_is_regular(e[1]));
-  assert(bzla_node_is_fun(e[0]));
+  assert(bzla_node_is_fun(e[0]) || bzla_node_is_array(e[0]));
   assert(bzla_node_is_args(e[1]));
 
   /* eliminate nested functions */
@@ -3225,8 +3184,6 @@ bzla_node_create_apply(Bzla *bzla, BzlaNode *fun, BzlaNode *args)
     bzla_beta_unassign_params(bzla, e[0]);
     return result;
   }
-  assert(!bzla_node_is_fun_cond(e[0])
-         || (!e[0]->e[1]->parameterized && !e[0]->e[2]->parameterized));
   return create_exp(bzla, BZLA_APPLY_NODE, 2, e);
 }
 
@@ -3269,7 +3226,8 @@ bzla_node_create_forall(Bzla *bzla, BzlaNode *param, BzlaNode *body)
 BzlaNode *
 bzla_node_create_exists(Bzla *bzla, BzlaNode *param, BzlaNode *body)
 {
-  return bzla_node_create_quantifier(bzla, BZLA_EXISTS_NODE, param, body);
+  return bzla_node_invert(bzla_node_create_quantifier(
+      bzla, BZLA_FORALL_NODE, param, bzla_node_invert(body)));
 }
 
 BzlaNode *
@@ -3285,14 +3243,6 @@ bzla_node_create_update(Bzla *bzla,
   assert(bzla_node_is_fun(e[0]));
   assert(bzla_node_is_args(e[1]));
   assert(!bzla_node_is_fun(e[2]));
-
-  if (bzla_node_real_addr(e[0])->parameterized
-      || bzla_node_real_addr(e[1])->parameterized
-      || bzla_node_real_addr(e[2])->parameterized)
-  {
-    assert(bzla_node_args_get_arity(bzla, args) == 1);
-    return bzla_exp_lambda_write(bzla, fun, args->e[0], value);
-  }
 
   res = create_exp(bzla, BZLA_UPDATE_NODE, 3, e);
   if (fun->is_array) res->is_array = 1;

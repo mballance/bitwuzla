@@ -956,6 +956,7 @@ clone_aux_bzla(Bzla *bzla,
   allocated = sizeof(Bzla);
 #endif
   memcpy(clone, bzla, sizeof(Bzla));
+  clone->qslv = NULL;
   clone->mm  = mm;
   clone->rng = bzla_rng_clone(bzla->rng, mm);
 #ifndef NDEBUG
@@ -1220,12 +1221,6 @@ clone_aux_bzla(Bzla *bzla,
          == clone->mm->allocated);
   CLONE_PTR_HASH_TABLE_DATA(quantifiers, bzla_clone_data_as_int);
   assert((allocated += MEM_PTR_HASH_TABLE(bzla->quantifiers))
-         == clone->mm->allocated);
-  CLONE_PTR_HASH_TABLE(exists_vars);
-  assert((allocated += MEM_PTR_HASH_TABLE(bzla->exists_vars))
-         == clone->mm->allocated);
-  CLONE_PTR_HASH_TABLE(forall_vars);
-  assert((allocated += MEM_PTR_HASH_TABLE(bzla->forall_vars))
          == clone->mm->allocated);
   CLONE_PTR_HASH_TABLE_DATA(feqs, bzla_clone_data_as_int);
   assert((allocated += MEM_PTR_HASH_TABLE(bzla->feqs)) == clone->mm->allocated);

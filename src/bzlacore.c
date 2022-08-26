@@ -569,6 +569,7 @@ bzla_print_stats(Bzla *bzla)
            bzla->avmgr ? bzla->avmgr->amgr->num_cnf_literals : 0);
 
   if (bzla->slv) bzla->slv->api.print_stats(bzla->slv);
+  if (bzla->qslv) bzla->qslv->api.print_stats(bzla->qslv);
 
 #ifdef BZLA_TIME_STATISTICS
   BZLA_MSG(bzla->msg, 1, "");
@@ -659,6 +660,7 @@ bzla_print_stats(Bzla *bzla)
              percent(bzla->time.ack, bzla->time.simplify));
 
   if (bzla->slv) bzla->slv->api.print_time_stats(bzla->slv);
+  if (bzla->qslv) bzla->qslv->api.print_time_stats(bzla->qslv);
 #endif
 
   BZLA_MSG(bzla->msg, 1, "");
@@ -715,14 +717,6 @@ bzla_new(void)
                                          (BzlaHashPtr) bzla_node_hash_by_id,
                                          (BzlaCmpPtr) bzla_node_compare_by_id);
   bzla->quantifiers =
-      bzla_hashptr_table_new(mm,
-                             (BzlaHashPtr) bzla_node_hash_by_id,
-                             (BzlaCmpPtr) bzla_node_compare_by_id);
-  bzla->exists_vars =
-      bzla_hashptr_table_new(mm,
-                             (BzlaHashPtr) bzla_node_hash_by_id,
-                             (BzlaCmpPtr) bzla_node_compare_by_id);
-  bzla->forall_vars =
       bzla_hashptr_table_new(mm,
                              (BzlaHashPtr) bzla_node_hash_by_id,
                              (BzlaCmpPtr) bzla_node_compare_by_id);
@@ -927,6 +921,7 @@ bzla_delete(Bzla *bzla)
   bzla_fp_word_blaster_delete(bzla);
 
   if (bzla->slv) bzla->slv->api.delet(bzla->slv);
+  if (bzla->qslv) bzla->qslv->api.delet(bzla->qslv);
 
   bzla_ass_delete_bv_list(
       bzla->bv_assignments,
@@ -1036,10 +1031,6 @@ bzla_delete(Bzla *bzla)
   bzla_hashptr_table_delete(bzla->ufs);
   bzla_hashptr_table_delete(bzla->lambdas);
   bzla_hashptr_table_delete(bzla->quantifiers);
-  assert(bzla->exists_vars->count == 0);
-  bzla_hashptr_table_delete(bzla->exists_vars);
-  assert(bzla->forall_vars->count == 0);
-  bzla_hashptr_table_delete(bzla->forall_vars);
   bzla_hashptr_table_delete(bzla->feqs);
   bzla_hashptr_table_delete(bzla->parameterized);
 #ifndef NDEBUG
@@ -1671,8 +1662,8 @@ bzla_reset_assumptions(Bzla *bzla)
                              (BzlaCmpPtr) bzla_node_compare_by_id);
 }
 
-static void
-reset_functions_with_model(Bzla *bzla)
+void
+bzla_reset_functions_with_model(Bzla *bzla)
 {
   BzlaNode *cur;
   uint32_t i;
@@ -1701,7 +1692,7 @@ bzla_reset_incremental_usage(Bzla *bzla)
   assert(bzla);
 
   bzla_reset_assumptions(bzla);
-  reset_functions_with_model(bzla);
+  bzla_reset_functions_with_model(bzla);
   bzla->valid_assignments = 0;
   bzla_model_delete(bzla);
 }
@@ -2374,7 +2365,7 @@ bzla_synthesize_exp(Bzla *bzla, BzlaNode *exp, BzlaPtrHashTable *backannotation)
       else if (bzla_node_is_bv_var(cur)
                || (bzla_node_is_apply(cur) && !cur->parameterized
                    && bzla_node_is_bv(bzla, cur))
-               || bzla_node_is_fun_eq(cur))
+               || (bzla_node_is_fun_eq(cur) && !cur->parameterized))
       {
         assert(!cur->parameterized);
         cur->av = bzla_aigvec_var(avmgr, bzla_node_bv_get_width(bzla, cur));
@@ -2409,6 +2400,12 @@ bzla_synthesize_exp(Bzla *bzla, BzlaNode *exp, BzlaPtrHashTable *backannotation)
         /* continue synthesizing children for apply and feq nodes if
          * lazy_synthesize is disabled */
         if (!opt_lazy_synth) goto PUSH_CHILDREN;
+      }
+      else if (bzla_node_is_quantifier(cur))
+      {
+        cur->av = bzla_aigvec_var(avmgr, bzla_node_bv_get_width(bzla, cur));
+        BZLALOG(2, "  synthesized: %s", bzla_util_node2string(cur));
+        bzla_aigvec_to_sat_tseitin(avmgr, cur->av);
       }
       /* we stop at function nodes as they will be lazily synthesized and
        * encoded during consistency checking */
@@ -2801,8 +2798,6 @@ bzla_check_sat(Bzla *bzla, int32_t lod_limit, int32_t sat_limit)
     }
   }
 
-  BZLA_ABORT(bzla->quantifiers->count, "Quantifiers support is disabled.");
-
   // FIXME: this is temporary until we support FP handling with LOD for Lambdas
   if (is_fp_logic(bzla))
   {
@@ -2869,20 +2864,22 @@ bzla_check_sat(Bzla *bzla, int32_t lod_limit, int32_t sat_limit)
 
   // FIXME (ma): not sound with slice elimination. see red-vsl.proof3106.smt2
   /* disabling slice elimination is better on QF_ABV and BV */
-  if (bzla->ufs->count > 0 || bzla->quantifiers->count > 0)
+  if (bzla->ufs->count > 0)
   {
     BZLA_MSG(bzla->msg,
              1,
              "found %s, disable slice elimination",
              bzla->ufs->count > 0 ? "UFs" : "quantifiers");
+    // TODO: check if this is still the case
     bzla_opt_set(bzla, BZLA_OPT_PP_ELIMINATE_EXTRACTS, 0);
   }
 
   /* set options for quantifiers */
-  if (bzla->quantifiers->count > 0)
+  if (bzla->quantifiers->count > 0 && bzla->bzla_sat_bzla_called == 0)
   {
+    bzla_opt_set(bzla, BZLA_OPT_INCREMENTAL, 1);
+    bzla_opt_set(bzla, BZLA_OPT_PRODUCE_MODELS, 1);
     bzla_opt_set(bzla, BZLA_OPT_PP_UNCONSTRAINED_OPTIMIZATION, 0);
-    bzla_opt_set(bzla, BZLA_OPT_PP_BETA_REDUCE, BZLA_BETA_REDUCE_ALL);
   }
 
   res = bzla_simplify(bzla);
@@ -2921,21 +2918,6 @@ bzla_check_sat(Bzla *bzla, int32_t lod_limit, int32_t sat_limit)
                    "Quantifiers not supported for -E aigprop");
         bzla->slv = bzla_new_aigprop_solver(bzla);
       }
-      else if ((engine == BZLA_ENGINE_QUANT && bzla->quantifiers->count > 0)
-               || bzla->quantifiers->count > 0)
-      {
-        BzlaPtrHashTableIterator it;
-        BzlaNode *cur;
-        bzla_iter_hashptr_init(&it, bzla->unsynthesized_constraints);
-        bzla_iter_hashptr_queue(&it, bzla->synthesized_constraints);
-        while (bzla_iter_hashptr_has_next(&it))
-        {
-          cur = bzla_node_real_addr(bzla_iter_hashptr_next(&it));
-          BZLA_ABORT(cur->lambda_below || cur->apply_below,
-                     "quantifiers with functions not supported yet");
-        }
-        bzla->slv = bzla_new_quantifier_solver(bzla);
-      }
       else
       {
         bzla->slv = bzla_new_fun_solver(bzla);
@@ -2945,14 +2927,26 @@ bzla_check_sat(Bzla *bzla, int32_t lod_limit, int32_t sat_limit)
       }
     }
 
-    assert(bzla->slv);
-    res = bzla->slv->api.sat(bzla->slv);
+    if (bzla->quantifiers->count > 0)
+    {
+      if (!bzla->qslv)
+      {
+        bzla->qslv = bzla_new_quantifier_solver(bzla);
+      }
+      res = bzla->qslv->api.sat(bzla->qslv);
+    }
+    else
+    {
+      assert(bzla->slv);
+      res = bzla->slv->api.sat(bzla->slv);
+    }
   }
   bzla->last_sat_result = res;
   bzla->bzla_sat_bzla_called++;
   bzla->valid_assignments = 1;
 
-  if (bzla_opt_get(bzla, BZLA_OPT_PRODUCE_MODELS) && res == BZLA_RESULT_SAT)
+  if (bzla_opt_get(bzla, BZLA_OPT_PRODUCE_MODELS) && res == BZLA_RESULT_SAT
+      && bzla->quantifiers->count == 0)
   {
     switch (bzla_opt_get(bzla, BZLA_OPT_ENGINE))
     {

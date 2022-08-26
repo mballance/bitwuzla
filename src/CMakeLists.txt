@@ -44,12 +44,12 @@ set(libbitwuzla_src_files
   bzlaslvaigprop.c
   bzlaslvfun.c
   bzlaslvprop.c
-  bzlaslvquant.c
+  bzlaslvquant.cpp
   bzlaslvsls.c
   bzlasort.c
   bzlasubst.c
   bzlafp.cpp
-  bzlasynth.c
+  bzlasynthterm.cpp
   api/c/bitwuzla.c
   dumper/bzladumpaig.c
   dumper/bzladumpbtor.c

@@ -466,7 +466,7 @@ assume_inputs(Bzla *bzla,
 }
 
 static BzlaNode *
-create_function_inequality(Bzla *bzla, BzlaNode *feq)
+create_function_disequality_witness(Bzla *bzla, BzlaNode *feq)
 {
   assert(bzla_node_is_regular(feq));
   assert(bzla_node_is_fun_eq(feq));
@@ -481,13 +481,20 @@ create_function_inequality(Bzla *bzla, BzlaNode *feq)
   BZLA_INIT_STACK(mm, args);
   funsort = bzla_sort_fun_get_domain(bzla, bzla_node_get_sort_id(feq->e[0]));
 
+  size_t len = bzla_util_num_digits(feq->id) + strlen("witness()_");
+
+  uint32_t i = 0;
   bzla_iter_tuple_sort_init(&it, bzla, funsort);
   while (bzla_iter_tuple_sort_has_next(&it))
   {
     sort = bzla_iter_tuple_sort_next(&it);
     assert(!bzla_sort_is_fun(bzla, sort));
-    var = bzla_exp_var(bzla, sort, 0);
+    size_t buf_len = len + bzla_util_num_digits(i) + 1;
+    char buf[buf_len];
+    snprintf(buf, buf_len, "witness(%u)_%u", feq->id, i);
+    var = bzla_exp_var(bzla, sort, buf);
     BZLA_PUSH_STACK(args, var);
+    ++i;
   }
 
   arg  = bzla_exp_args(bzla, args.start, BZLA_COUNT_STACK(args));
@@ -504,10 +511,10 @@ create_function_inequality(Bzla *bzla, BzlaNode *feq)
   return bzla_node_invert(eq);
 }
 
-/* for every function equality f = g, add
+/* For every function equality f = g, add a witness for disequality:
  * f != g -> f(a) != g(a) */
 static void
-add_function_inequality_constraints(Bzla *bzla)
+add_function_disequality_witnesses(Bzla *bzla)
 {
   uint32_t i;
   BzlaNode *cur, *neq, *con;
@@ -519,15 +526,11 @@ add_function_inequality_constraints(Bzla *bzla)
 
   mm = bzla->mm;
   BZLA_INIT_STACK(mm, visit);
-  /* we have to add inequality constraints for every function equality
-   * in the formula (inputs are still part of the formula). */
   bzla_iter_hashptr_init(&it, bzla->inputs);
   bzla_iter_hashptr_queue(&it, bzla->unsynthesized_constraints);
   bzla_iter_hashptr_queue(&it, bzla->assumptions);
-  assert(bzla->embedded_constraints->count == 0);
-  assert(bzla->varsubst_constraints->count == 0);
-  /* we don't have to traverse synthesized_constraints as we already created
-   * inequality constraints for them in a previous sat call */
+  /* Note: We don't have to traverse synthesized_constraints as we already
+   * created witnesses for them in a previous check-sat call. */
   while (bzla_iter_hashptr_has_next(&it))
   {
     cur = bzla_iter_hashptr_next(&it);
@@ -542,10 +545,11 @@ add_function_inequality_constraints(Bzla *bzla)
   {
     cur = bzla_node_real_addr(BZLA_POP_STACK(visit));
 
-    if (bzla_hashint_table_contains(cache, cur->id)) continue;
+    if (bzla_hashint_table_contains(cache, cur->id))
+      continue;
 
     bzla_hashint_table_add(cache, cur->id);
-    if (bzla_node_is_fun_eq(cur))
+    if (bzla_node_is_fun_eq(cur) && !cur->parameterized)
     {
       b = bzla_hashptr_table_get(bzla->feqs, cur);
       /* already visited and created inequality constraint in a previous
@@ -553,11 +557,11 @@ add_function_inequality_constraints(Bzla *bzla)
       if (b->data.as_int) continue;
       BZLA_PUSH_STACK(feqs, cur);
       /* if the lambdas are not arrays, we cannot handle equalities */
-      BZLA_ABORT(
-          (bzla_node_is_lambda(cur->e[0]) && !bzla_node_is_array(cur->e[0]))
-              || (bzla_node_is_lambda(cur->e[1])
-                  && !bzla_node_is_array(cur->e[1])),
-          "equality over non-array lambdas not supported yet");
+      // BZLA_ABORT(
+      //    (bzla_node_is_lambda(cur->e[0]) && !bzla_node_is_array(cur->e[0]))
+      //        || (bzla_node_is_lambda(cur->e[1])
+      //            && !bzla_node_is_array(cur->e[1])),
+      //    "equality over non-array lambdas not supported yet");
     }
     for (i = 0; i < cur->arity; i++) BZLA_PUSH_STACK(visit, cur->e[i]);
   }
@@ -572,7 +576,7 @@ add_function_inequality_constraints(Bzla *bzla)
     assert(b);
     assert(b->data.as_int == 0);
     b->data.as_int = 1;
-    neq            = create_function_inequality(bzla, cur);
+    neq            = create_function_disequality_witness(bzla, cur);
     con            = bzla_exp_implies(bzla, bzla_node_invert(cur), neq);
     bzla_assert_exp(bzla, con);
     bzla_node_release(bzla, con);
@@ -980,6 +984,8 @@ search_initial_applies_bv_skeleton(BzlaFunSolver *slv,
       if (bzla_hashint_table_contains(cache, cur->id)) continue;
 
       bzla_hashint_table_add(cache, cur->id);
+
+      if (bzla_node_is_quantifier(cur)) continue;
 
       if (bzla_node_is_apply(cur) && !cur->parameterized)
       {
@@ -1608,7 +1614,7 @@ push_applies_for_propagation(Bzla *bzla,
 
     if (!cur->apply_below
         || bzla_hashint_table_contains(apply_search_cache, cur->id)
-        || bzla_node_is_fun_eq(cur))
+        || bzla_node_is_fun_eq(cur) || bzla_node_is_quantifier(cur))
       continue;
 
     bzla_hashint_table_add(apply_search_cache, cur->id);
@@ -1732,6 +1738,8 @@ propagate(Bzla *bzla,
            || bzla_opt_get(bzla, BZLA_OPT_PP_NONDESTR_SUBST));
     args = bzla_node_get_simplified(bzla, args);
     assert(bzla_node_is_args(args));
+    assert(bzla_sort_fun_get_domain(bzla, bzla_node_get_sort_id(fun))
+           == bzla_node_get_sort_id(args));
 
     push_applies_for_propagation(bzla, args, prop_stack, apply_search_cache);
 
@@ -1871,6 +1879,12 @@ propagate(Bzla *bzla,
       assert(bzla_node_is_apply(fun_value));
       BZLA_PUSH_STACK(*prop_stack, app);
       BZLA_PUSH_STACK(*prop_stack, bzla_node_real_addr(fun_value)->e[0]);
+      if (!bzla_hashptr_table_get(cleanup_table, BZLA_TOP_STACK(*prop_stack)))
+      {
+        bzla_hashptr_table_add(
+            cleanup_table, bzla_node_copy(bzla, BZLA_TOP_STACK(*prop_stack)))
+            ->data.flag = true;
+      }
       slv->stats.propagations_down++;
       app->propagated = 0;
       BZLALOG(1, "  propagate down: %s", bzla_util_node2string(app));
@@ -1977,7 +1991,7 @@ generate_table(Bzla *bzla, BzlaNode *fun, BzlaNode **base_array)
       static_rho = 0;
       cur_fun    = cur;
 
-      if (bzla_node_is_lambda(cur))
+      if (bzla_node_is_lambda(cur) && bzla_node_is_array(cur))
       {
         assert(cur->is_array);
         static_rho = bzla_node_lambda_get_static_rho(cur);
@@ -2022,7 +2036,11 @@ generate_table(Bzla *bzla, BzlaNode *fun, BzlaNode **base_array)
       }
 
       /* child already pushed w.r.t. evaluation of condition */
-      if (bzla_node_is_fun_cond(cur) || bzla_node_is_update(cur)) continue;
+      if (bzla_node_is_fun_cond(cur)
+          || bzla_node_is_update(cur)
+          /* do not traverse further down if it's a non-array lambda. */
+          || (bzla_node_is_lambda(cur) && !bzla_node_is_array(cur)))
+        continue;
     }
 
     for (i = 0; i < cur->arity; i++) BZLA_PUSH_STACK(visit, cur->e[i]);
@@ -2381,6 +2399,7 @@ check_and_resolve_conflicts(Bzla *bzla,
   bzla_iter_hashptr_init(&pit, cleanup_table);
   while (bzla_iter_hashptr_has_next(&pit))
   {
+    BzlaPtrHashBucket *b = pit.bucket;
     cur = bzla_iter_hashptr_next(&pit);
     assert(bzla_node_is_regular(cur));
     if (bzla_node_is_apply(cur))
@@ -2406,6 +2425,14 @@ check_and_resolve_conflicts(Bzla *bzla,
          * premature release in case that function is released via API
          * call) */
         BZLA_PUSH_STACK(bzla->functions_with_model, bzla_node_copy(bzla, cur));
+      }
+
+      /* If flag is set we have to decrease the reference count (function
+       * created while beta reducing). */
+      if (b->data.flag)
+      {
+        bzla_node_release(bzla, cur);
+        continue;
       }
     }
   }
@@ -2685,7 +2712,7 @@ sat_fun_solver(BzlaFunSolver *slv)
 
   if (slv->assume_lemmas) reset_lemma_cache(slv);
 
-  if (bzla->feqs->count > 0) add_function_inequality_constraints(bzla);
+  if (bzla->feqs->count > 0) add_function_disequality_witnesses(bzla);
 
   /* initialize dual prop clone */
   if (bzla_opt_get(bzla, BZLA_OPT_FUN_DUAL_PROP))
@@ -2771,6 +2798,7 @@ sat_fun_solver(BzlaFunSolver *slv)
     assert(result == BZLA_RESULT_SAT);
 
     if (bzla->ufs->count == 0 && bzla->lambdas->count == 0) break;
+    bzla_reset_functions_with_model(bzla);
 
     check_and_resolve_conflicts(
         bzla, clone, clone_root, exp_map, &init_apps, init_apps_cache);
@@ -2832,6 +2860,8 @@ DONE:
     ls_slv->api.delet(ls_slv);
     bzla->slv = (BzlaSolver *) slv;
   }
+  bzla->last_sat_result = result;
+  bzla->valid_assignments = 1;
   return result;
 }
 

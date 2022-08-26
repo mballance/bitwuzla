@@ -126,7 +126,7 @@ set_option(USE_SYMFPU OFF)
 #       bzlaconfig.h and they are else not yet added to CMAKE_C(XX)_FLAGS at
 #       file generation time (configure_file).
 add_required_c_flag("-std=gnu99")
-add_required_cxx_flag("-std=gnu++11")
+add_required_cxx_flag("-std=gnu++17")
 
 add_check_c_cxx_flag("-W")
 add_check_c_cxx_flag("-Wall")
@@ -255,12 +255,11 @@ endif()
 find_package(Btor2Tools REQUIRED)
 find_package(GMP REQUIRED)
 
-if(NOT IS_WINDOWS_BUILD)
+if(NOT IS_WINDOWS_BUILD AND (USE_CMS OR TESTING))
   set(THREADS_PREFER_PTHREAD_FLAG ON)
   find_package(Threads)
   if(Threads_FOUND)
     set(LIBRARIES ${LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-    add_definitions("-DBZLA_HAVE_PTHREADS")
   endif()
 endif()
 

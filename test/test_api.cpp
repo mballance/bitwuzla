@@ -235,6 +235,8 @@ class TestApi : public TestBitwuzla
   const char *d_error_format           = "unknown format";
   const char *d_error_inc_quant =
       "incremental solving is currently not supported with quantifiers";
+  const char *d_error_model_quant =
+      "model printing is currently not supported with quantifiers";
 };
 
 /* -------------------------------------------------------------------------- */
@@ -2776,10 +2778,6 @@ TEST_F(TestApi, check_sat)
   ASSERT_NO_FATAL_FAILURE(bitwuzla_check_sat(d_bzla));
   ASSERT_DEATH(bitwuzla_check_sat(d_bzla), d_error_incremental);
 
-  bitwuzla_set_option(d_other_bzla, BITWUZLA_OPT_INCREMENTAL, 1);
-  bitwuzla_assert(d_other_bzla, d_other_exists);
-  ASSERT_DEATH(bitwuzla_check_sat(d_other_bzla), d_error_inc_quant);
-
   Bitwuzla *bzla = bitwuzla_new();
   bitwuzla_set_option(bzla, BITWUZLA_OPT_INCREMENTAL, 1);
   ASSERT_NO_FATAL_FAILURE(bitwuzla_check_sat(bzla));
@@ -2805,12 +2803,9 @@ TEST_F(TestApi, get_value)
   bitwuzla_assert(d_other_bzla, d_other_exists);
   ASSERT_DEATH(bitwuzla_get_value(d_other_bzla, d_other_bv_const8),
                d_error_sat);
-  ASSERT_DEATH(bitwuzla_check_sat(d_other_bzla),
-               "Quantifiers support is disabled.");
-// Disabled since quantifiers support was disabled.
-//  ASSERT_EQ(bitwuzla_check_sat(d_other_bzla), BITWUZLA_SAT);
-//  ASSERT_DEATH(bitwuzla_get_value(d_other_bzla, d_other_bv_const8),
-//               "'get-value' is currently not supported with quantifiers");
+  ASSERT_EQ(bitwuzla_check_sat(d_other_bzla), BITWUZLA_SAT);
+  ASSERT_DEATH(bitwuzla_get_value(d_other_bzla, d_other_bv_const8),
+               "'get-value' is currently not supported with quantifiers");
 }
 
 TEST_F(TestApi, get_bv_value)
@@ -3001,12 +2996,11 @@ TEST_F(TestApi, print_model)
 
   bitwuzla_set_option(d_other_bzla, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_assert(d_other_bzla, d_other_exists);
-  ASSERT_DEATH(bitwuzla_check_sat(d_other_bzla),
-               "Quantifiers support is disabled.");
-// Disabled since quantifiers support was disabled.
-//  ASSERT_EQ(bitwuzla_check_sat(d_other_bzla), BITWUZLA_SAT);
-//  ASSERT_NO_FATAL_FAILURE(bitwuzla_print_model(d_other_bzla, "btor", stdout));
-//  ASSERT_NO_FATAL_FAILURE(bitwuzla_print_model(d_other_bzla, "smt2", stdout));
+  ASSERT_EQ(bitwuzla_check_sat(d_other_bzla), BITWUZLA_SAT);
+  ASSERT_DEATH(bitwuzla_print_model(d_other_bzla, "btor", stdout),
+               d_error_model_quant);
+  ASSERT_DEATH(bitwuzla_print_model(d_other_bzla, "smt2", stdout),
+               d_error_model_quant);
 }
 
 TEST_F(TestApi, dump_formula1)

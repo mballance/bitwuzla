@@ -133,15 +133,12 @@ enum BzlaOption
   BZLA_OPT_AIGPROP_USE_RESTARTS,
 
   /* Quantifier engine (expert) */
-  BZLA_OPT_QUANT_CER,
-  BZLA_OPT_QUANT_DER,
-  BZLA_OPT_QUANT_DUAL_SOLVER,
-  BZLA_OPT_QUANT_FIXSYNTH,
-  BZLA_OPT_QUANT_MINISCOPE,
-  BZLA_OPT_QUANT_SYNTH,
-  BZLA_OPT_QUANT_SYNTH_ITE_COMPLETE,
-  BZLA_OPT_QUANT_SYNTH_LIMIT,
+  BZLA_OPT_QUANT_SYNTH_SK,
   BZLA_OPT_QUANT_SYNTH_QI,
+  BZLA_OPT_QUANT_SKOLEM_UF,
+  BZLA_OPT_QUANT_EAGER_SKOLEM,
+  BZLA_OPT_QUANT_MBQI,
+  BZLA_OPT_QUANT_MODE,
 
   /* Other expert options */
   BZLA_OPT_AUTO_CLEANUP_INTERNAL,
@@ -275,6 +272,34 @@ enum BzlaOptQuantSynth
 };
 typedef enum BzlaOptQuantSynth BzlaOptQuantSynt;
 
+/** Different modes for handling counterexample literals. */
+enum BzlaOptQuantMode
+{
+  /* Eagerly assume counterexample literals when checking ground formulas. */
+  BZLA_QUANT_MODE_EAGER,
+  /* Do not assume counterexample literals when checking ground formulas. */
+  BZLA_QUANT_MODE_LAZY,
+  /**
+   * Like BZLA_QUANT_MODE_EAGER, but use model of initial ground check if check
+   * was satisfiable with all counterexample literals assumed. */
+  BZLA_QUANT_MODE_EAGER_REUSE,
+  /**
+   * Like BZLA_QUANT_MODE_EAGER, but do additional satisfiability check after
+   * counterexample literals were assumed and satisfiable. */
+  BZLA_QUANT_MODE_EAGER_CHECK,
+  /**
+   * Combines BZLA_QUANT_MODE_EAGER_CHECK + BZLA_QUANT_MODE_EAGER +
+   * BZLA_QUANT_MODE_LAZY in a sequential portfolio (in case one of the modes
+   * returns unknown).
+   */
+  BZLA_QUANT_MODE_PORTFOLIO,
+};
+typedef enum BzlaOptQuantMode BzlaOptQuantMode;
+
+#define BZLA_QUANT_MODE_DFLT BZLA_QUANT_MODE_PORTFOLIO
+#define BZLA_QUANT_MODE_MIN BZLA_QUANT_MODE_EAGER
+#define BZLA_QUANT_MODE_MAX BZLA_QUANT_MODE_PORTFOLIO
+
 enum BzlaOptFunEagerLemmas
 {
   BZLA_FUN_EAGER_LEMMAS_NONE,
@@ -366,7 +391,7 @@ typedef struct BzlaOptHelp BzlaOptHelp;
 extern const char *const g_bzla_se_name[BZLA_SAT_ENGINE_MAX + 1];
 
 #define BZLA_ENGINE_MIN BZLA_ENGINE_FUN
-#define BZLA_ENGINE_MAX BZLA_ENGINE_QUANT
+#define BZLA_ENGINE_MAX BZLA_ENGINE_AIGPROP
 #define BZLA_ENGINE_DFLT BZLA_ENGINE_FUN
 
 #define BZLA_INPUT_FORMAT_MIN BZLA_INPUT_FORMAT_NONE
