@@ -1,0 +1,27 @@
+[build-system]
+build-backend = 'mesonpy'
+requires = ['meson-python', 'cython>=3.0.0']
+
+[project]
+name = 'bitwuzla'
+dynamic = ['version']
+description = 'Bitwuzla Satisfiability Modulo Theories Solver'
+requires-python = '>= 3.7'
+license = {file = 'COPYING'}
+authors = [
+  {name = 'Aina Niemetz'},
+  {name = 'Mathias Preiner'},
+]
+
+[project.urls]
+Homepage = "https://bitwuzla.github.io"
+Documentation = "https://bitwuzla.github.io/docs/python/api.html"
+Repository = "https://github.com/bitwuzla/bitwuzla"
+Issues = "https://github.com/bitwuzla/bitwuzla/issues"
+Changelog = "https://github.com/bitwuzla/bitwuzla/blob/main/NEWS.md"
+
+[tool.meson-python.args]
+dist = []
+setup = ['-Dpython=true']
+compile = ['python-bindings']
+install = ['--tags=python-bindings']

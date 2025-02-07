@@ -5,35 +5,36 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, macos-14, ubuntu-24.04-arm]
         name: [
-          production,
-          production-clang,
+          release,
           debug,
-          debug-clang
         ]
 
-        exclude:
-          - name: production-clang
-            os: macos-latest
-
-          - name: debug-clang
-            os: macos-latest
-
         include:
-          - name: production
-            config:
-
-          - name: production-clang
-            config: --no-symfpu
-            env: CC=clang CXX=clang++
+          - name: release
+            config: --testing --no-unit-testing --python
 
           - name: debug
-            config: debug --no-symfpu
+            config: debug --python --cryptominisat --kissat
+
+          - name: release-clang
+            os: ubuntu-latest
+            config: --testing --no-unit-testing --python --cryptominisat --kissat
+            env: CC=clang CXX=clang++
 
           - name: debug-clang
-            config: debug
+            os: ubuntu-latest
+            config: debug --shared --python
             env: CC=clang CXX=clang++
+
+          - name: release-win64
+            os: ubuntu-latest
+            config: --win64
+
+          - name: release-aarch64
+            os: ubuntu-latest
+            config: --arm64
 
     name: ${{ matrix.os }}:${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -43,40 +44,54 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgmp-dev
+          sudo apt-get install -y libgmp-dev ninja-build
+          if [[ "${{matrix.name}}" == "release-win64" ]]; then
+            sudo apt-get install -y mingw-w64
+            sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
+            sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
+          fi
+          if [[ "${{matrix.name}}" == "release-aarch64" ]]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          fi
 
       - name: Install Packages (macOS)
         if: runner.os == 'macOS'
+        run: brew install gmp pkgconfig ninja
+
+      - name: Setup Python Environment
         run: |
-          brew install gmp
+          python3 -m venv ~/.venv
+          source ~/.venv/bin/activate
+          python3 -m pip install meson pytest cython>=3.*
+          echo "$HOME/.venv/bin/" >> $GITHUB_PATH
 
-      - uses: actions/checkout@v2
-
-      - name: Restore Dependencies
-        id: restore-deps
-        uses: actions/cache@v2
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          path: deps/install
-          key: ${{ runner.os }}-deps-${{ hashFiles('contrib/setup-*') }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          ssh-key: ${{ secrets.BZLA_LIBS_KEY }}
+          submodules: 'recursive'
 
-      - name: Setup Dependencies
-        if: steps.restore-deps.outputs.cache-hit != 'true'
-        run: |
-          ./contrib/setup-btor2tools.sh
-          ./contrib/setup-cadical.sh
-          ./contrib/setup-cms.sh
-          ./contrib/setup-kissat.sh
-          ./contrib/setup-lingeling.sh
-          ./contrib/setup-symfpu.sh
+      - name: Wrap
+        run: meson wrap install gtest
 
       - name: Configure
-        run: |
-          ${{ matrix.env }} ./configure.sh ${{ matrix.config }}
+        run: ${{ matrix.env }} ./configure.py --prefix=${{ github.workspace }}/build/install ${{ matrix.config }}
 
       - name: Build
-        run: make -j2
+        run: ninja install
         working-directory: build
 
-      - name: Run CTest
-        run: ctest -j2 --output-on-failure
+      - name: Test
+        if: matrix.name != 'release-win64' && matrix.name != 'release-aarch64'
+        run: meson test --print-errorlogs
         working-directory: build
+
+      - name: Examples
+        if: matrix.name != 'release-win64' && matrix.name != 'release-aarch64'
+        working-directory: examples
+        run: |
+          pkgconfigdir=$(find ${{ github.workspace }}/build/install/lib -name pkgconfig)
+          pythonlibdir=$(find ${{ github.workspace }}/build/install/lib -name site-packages)
+          meson setup build --pkg-config-path=$pkgconfigdir -Dpython_path=$pythonlibdir
+          cd build
+          meson test -v

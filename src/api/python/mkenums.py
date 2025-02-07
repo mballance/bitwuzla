@@ -1,20 +1,21 @@
 ###
 # Bitwuzla: Satisfiability Modulo Theories (SMT) solver.
 #
-# This file is part of Bitwuzla.
+# Copyright (C) 2020 by the authors listed in the AUTHORS file at
+# https://github.com/bitwuzla/bitwuzla/blob/main/AUTHORS
 #
-# Copyright (C) 2007-2022 by the authors listed in the AUTHORS file.
-#
-# See COPYING for more information on using this software.
+# This file is part of Bitwuzla under the MIT license. See COPYING for more
+# information at https://github.com/bitwuzla/bitwuzla/blob/main/COPYING
 ##
+
 #
-# Generate pybitwuzla_enums.pxd from bitwuzla.h
+# Generate enums.pxd and option.pxd includes from enums.h and option.h.
 #
-# Usage: mkenums.py path/to/bitwuzla.h path/to/outputfile
+# Usage: mkenums.py path/to/header.h path/to/outputfile
 #
 
+import argparse
 import sys
-import os
 import re
 from collections import OrderedDict
 
@@ -29,7 +30,7 @@ class BitwuzlaEnumParseError(Exception):
 
 def extract_enums(header):
     """
-    Given the file "bitwuzla.h", constructs a dictionary representing the set
+    Given the file "enums.h", constructs a dictionary representing the set
     of all Bitwuzla enums and corresponding values
     """
 
@@ -47,14 +48,19 @@ def extract_enums(header):
     bzla_enums = OrderedDict()
 
     # For each line ...
+    value_prefix = None
     for line in line_iter:
 
+#        prefix = re.match(r'#define EVALUE\(name\) (\w+)_##name', line)
+#        if prefix:
+#            assert value_prefix is None
+#            value_prefix = prefix.group(1)
+#
         # Do we see the _start_ of an enum?
-        if line.startswith("enum Bitwuzla"):
-
-            # Obtain the enum name by splitting the line and taking the second
-            # part
-            enum_name = line.split(" ")[1]
+        # Find start of enum defined as `ENUM(<enum_name>)`
+        enum = re.match(r'enum ENUM\((\w+)\)', line)
+        if enum:
+            enum_name = enum.group(1)
 
             # Get the next line
             line = next(line_iter)
@@ -69,11 +75,10 @@ def extract_enums(header):
             # Keep iterating until our line starts with the closing curly
             while not line.startswith("};"):
 
-                # Find enum value in line starting with prefix `BITWUZLA_`.
-                line_values = re.findall(r'^(BITWUZLA_[A-Z_]+)', line)
-                assert len(line_values) <= 1
-                if line_values:
-                    enum_vals.extend(line_values)
+                # Find enum value in line defined as `EVALUE(<value>)`.
+                evalue = re.match(r'EVALUE\((\w+)\)', line)
+                if evalue:
+                    enum_vals.append(f'{evalue.group(1)}')
 
                 # Consume the next line
                 line = next(line_iter)
@@ -86,8 +91,8 @@ def extract_enums(header):
 
 
 # Template for one enum
-C_ENUM_TEMPLATE = """
-    cdef enum {bzla_enum:s}:
+CPP_ENUM_TEMPLATE = """
+    cdef enum class Cpp{bzla_enum:s} "bitwuzla::{bzla_enum:s}":
         {values:s}
 """
 
@@ -98,10 +103,33 @@ class {bzla_enum:s}(Enum):
     {values:s}
 """
 
+PY_ENUM_TEMPLATE_STR = """
+class {bzla_enum:s}(Enum):
+    \"\"\"{docstring:s}
+    \"\"\"
+    {values:s}
+
+    def __str__(self):
+        cdef stringstream c_ss
+        c_ss << <Cpp{bzla_enum}> self.value
+        return c_ss.to_string().decode()
+"""
+
 # Template for the whole file
 FILE_TEMPLATE = """from enum import Enum
 
-cdef extern from \"bitwuzla.h\":
+cdef extern from "<iostream>" namespace "std":
+    cdef cppclass ostream:
+        pass
+
+cdef extern from "<sstream>" namespace "std":
+    cdef cppclass stringstream(ostream):
+        string to_string "str" () const
+        stringstream &operator << (CppKind)
+        stringstream &operator << (CppResult)
+        stringstream &operator << (CppRoundingMode)
+
+cdef extern from \"bitwuzla/cpp/bitwuzla.h\" namespace \"bitwuzla\":
 {cenums:s}
 
 {pyenums:s}"""
@@ -109,11 +137,11 @@ cdef extern from \"bitwuzla.h\":
 ENUM_DOCSTRINGS = {
     "Option":
 """Configuration options supported by Bitwuzla. For more information on
-   options see :ref:`c_options`.
+   options see :ref:`cpp_options`.
 """,
 
     "Kind":
-"""BitwuzlaTerm kinds. For more information on term kinds see :ref:`c_kinds`.
+"""BitwuzlaTerm kinds. For more information on term kinds see :cpp:enum:`bitwuzla::Kind`.
 """,
 
     "Result":
@@ -128,7 +156,7 @@ ENUM_DOCSTRINGS = {
 
 def generate_output(bzla_enums, output_file):
     """
-    Given a dictionary of enums, formats each enum into `C_ENUM_TEMPLATE` and
+    Given a dictionary of enums, formats each enum into `CPP_ENUM_TEMPLATE` and
     then all the enums into `FILE_TEMPLATE` and writes into "output_file"
     """
 
@@ -143,35 +171,28 @@ def generate_output(bzla_enums, output_file):
         formatted_c_values = ",\n        ".join(values)
 
         # Construct the C enum string
-        s = C_ENUM_TEMPLATE.format(
+        s = CPP_ENUM_TEMPLATE.format(
             bzla_enum=bzla_enum, values=formatted_c_values
         )
         all_c_enums.append(s)
 
 
         #  Construct the Python enum string
-
-        # We do not need to export BitwuzlaBVBase enums
-        if bzla_enum == 'BitwuzlaBVBase':
-            continue
         py_enum_name = bzla_enum.replace('Bitwuzla', '')
         py_values = []
         for e in values:
-            py_e = e.replace('BITWUZLA_', '')
-            for prefix in ('BV_BASE_', 'OPT_', 'KIND_', 'RM_'):
-                if py_e.startswith(prefix):
-                    py_e = py_e.replace(prefix, '', 1)
-                    break
-            if e not in ('BITWUZLA_RM_MAX', 'BITWUZLA_NUM_KINDS',
-                         'BITWUZLA_OPT_NUM_OPTS'):
-                py_values.append('{} = {}'.format(py_e, e))
+            py_e = e
+            if e not in ('MAX', 'NUM_KINDS',
+                         'NUM_OPTS'):
+                py_values.append('{} = Cpp{}.{}'.format(py_e, py_enum_name, e))
 
         formatted_py_values = "\n    ".join(py_values)
         if py_enum_name not in ENUM_DOCSTRINGS:
             raise BitwuzlaEnumParseError(
                     f'Missing docstring for enum {py_enum_name}')
         docstring = ENUM_DOCSTRINGS[py_enum_name]
-        s = PY_ENUM_TEMPLATE.format(
+        tpl = PY_ENUM_TEMPLATE if py_enum_name == 'Option' else PY_ENUM_TEMPLATE_STR
+        s = tpl.format(
             bzla_enum=py_enum_name,
             docstring=docstring,
             values=formatted_py_values
@@ -193,23 +214,19 @@ def main():
     Entry point
     """
 
-    # We expect to only have three arguments
-    if len(sys.argv) != 3:
-        raise ValueError("invalid number of arguments")
+    ap = argparse.ArgumentParser()
+    ap.add_argument('input_file')
+    ap.add_argument('output_file')
+    args = ap.parse_args()
 
-    # Script arguments
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
-
-    # We expect our last argument to be a file 'bitwuzla.h'
-    if os.path.basename(output_file) == "bitwuzla.h":
-        raise ValueError("bitwuzla.h not specified")
+    if not args.input_file.endswith('enums.h') and not args.input_file.endswith('option.h'):
+        raise ValueError("Expected enums.h or option.h as input file")
 
     # Extract all of our enums
-    bzla_enums = extract_enums(input_file)
+    bzla_enums = extract_enums(args.input_file)
 
     # Generate our output file
-    generate_output(bzla_enums, output_file)
+    generate_output(bzla_enums, args.output_file)
 
     return 0
 

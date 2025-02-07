@@ -15,18 +15,19 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-# Specify where to find pybitwuzla
+# Specify where to find bitwuzla
 import sys
-sys.path.insert(0, "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+sys.path.insert(0, "@bitwuzla_python_dir@")
 
 # Add path to enable custom extensions
-sys.path.insert(0, '${CMAKE_CURRENT_SOURCE_DIR}/extensions/')
+sys.path.insert(0, '@current_source_dir@/extensions/')
 
 # -- Project information -----------------------------------------------------
 
 project = 'Bitwuzla'
-copyright = '2022, the authors of Bitwuzla'
+copyright = '2023, the authors of Bitwuzla'
 author = 'The authors of Bitwuzla'
+version = '@version@'
 
 
 # -- General configuration ---------------------------------------------------
@@ -42,6 +43,7 @@ extensions = [
         'sphinx.ext.todo',
         'breathe',
         'examples',
+        'literalincludegen'
 ]
 
 todo_include_todos = True
@@ -70,14 +72,16 @@ html_theme = 'sphinx_rtd_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['${CMAKE_CURRENT_SOURCE_DIR}/_static']
+html_static_path = ['@current_source_dir@/_static']
 html_css_files = ['custom.css']
 html_show_sourcelink = False
 
 # -- Breathe configuration ---------------------------------------------------
-breathe_default_project = "Bitwuzla"
+breathe_domain_by_extension = {"h" : "cpp"}
 
-breathe_domain_by_extension = {"h" : "c"}
+# -- Literal include extension for generated files ---------------------------
+lig_source_dir = '@current_source_dir@'
+lig_build_dir = '@current_build_dir@'
 
 # -- SMT-LIB syntax highlighting ---------------------------------------------
 from pygments.lexer import RegexLexer
@@ -90,6 +94,7 @@ class SmtLibLexer(RegexLexer):
     tokens = {
         'root': [
             (r'QF_BV', token.Text),
+            (r'QF_ABV', token.Text),
             (r'set-logic', token.Keyword),
             (r'set-option', token.Keyword),
             (r'declare-const', token.Keyword),
@@ -103,17 +108,21 @@ class SmtLibLexer(RegexLexer):
             (r'get-unsat-assumptions', token.Keyword),
             (r'get-unsat-core', token.Keyword),
             (r'get-value', token.Keyword),
+            (r'reset-assertions', token.Keyword),
+            (r'reset', token.Keyword),
             (r'push', token.Keyword),
             (r'pop', token.Keyword),
-            (r':incremental', token.Name.Attribute),
             (r':named', token.Name.Attribute),
             (r':produce-models', token.Name.Attribute),
             (r':produce-unsat-cores', token.Name.Attribute),
             (r':produce-unsat-assumptions', token.Name.Attribute),
+            (r':verbosity', token.Name.Attribute),
+            (r':bv-solver', token.Name.Attribute),
             (r'!', token.Name.Attribute),
             (r'BitVec', token.Name.Attribute),
             (r'RNE', token.Name.Attribute),
             (r'true', token.String),
+            (r'false', token.String),
             (r'distinct', token.Operator),
             (r'=', token.Operator),
             (r'and', token.Operator),
@@ -129,15 +138,17 @@ class SmtLibLexer(RegexLexer):
             (r'ite', token.Operator),
             (r'to_fp_unsigned', token.Operator),
             (r'\+zero', token.Operator),
-            (r'#b[0-1]+', token.Text),
-            (r'bv[0-9]+', token.Text),
+            (r'#b[0-1]+', token.String),
+            (r'bv[0-9]+', token.String),
             (r'[a-zA-Z][a-zA-Z0-9]*', token.Name),
             (r'[0-9]+', token.Number),
             (r'\s', token.Text),
             (r'\(_', token.Text),
             (r'\(', token.Text),
             (r'\)', token.Text),
-            (r';.*$', token.Comment)
+            (r'@bzla.var_', token.Text),
+            (r';.*$', token.Comment),
+            (r'".*"', token.String)
         ]
     }
 

@@ -1,529 +1,317 @@
 ###
 # Bitwuzla: Satisfiability Modulo Theories (SMT) solver.
 #
-# This file is part of Bitwuzla.
+# Copyright (C) 2020 by the authors listed in the AUTHORS file at
+# https://github.com/bitwuzla/bitwuzla/blob/main/AUTHORS
 #
-# Copyright (C) 2007-2022 by the authors listed in the AUTHORS file.
-#
-# See COPYING for more information on using this software.
+# This file is part of Bitwuzla under the MIT license. See COPYING for more
+# information at https://github.com/bitwuzla/bitwuzla/blob/main/COPYING
 ##
 
-from libc.stdio cimport FILE
-from libcpp cimport bool
+from bitwuzla import BitwuzlaException
 from cpython.ref cimport PyObject
-from libc.stdint cimport int32_t, uint32_t, uint64_t
-from pybitwuzla import BitwuzlaException
+from libc.stdint cimport uint8_t, uint32_t, uint64_t, int64_t
+from libcpp cimport bool
+from libcpp.map cimport map
+from libcpp.unordered_map cimport unordered_map
+from libcpp.memory cimport shared_ptr
+from libcpp.optional cimport optional
+from libcpp.string cimport string
+from libcpp.vector cimport vector
 
-cdef inline int raise_py_error() except *:
-    raise BitwuzlaException(
-            pybitwuzla_get_err_msg().decode('utf-8').split(':', 1)[1].strip())
+cdef extern from "<functional>" namespace "std" nogil:
+    cdef cppclass reference_wrapper[T]:
+        T& get() const
 
-cdef extern from "pybitwuzla_abort.h":
-    void pybitwuzla_abort_fun(const char* msg)
-    const char * pybitwuzla_get_err_msg()
+cdef extern from "<iostream>" namespace "std":
+    ostream cout
+    cdef cppclass ostream:
+        ostream &operator << (set_bv_format)
 
-cdef extern from "pybitwuzla_utils.h":
-    void pybitwuzla_delete(Bitwuzla *bitwuzla)
-    void pybitwuzla_set_term(
-            Bitwuzla *bitwuzla, PyObject *fun, PyObject *state)
+cdef extern from "<sstream>" namespace "std":
+    cdef cppclass stringstream(ostream):
+        string to_string "str" () const
+        stringstream &operator << (Result)
 
-cdef extern from "bitwuzla.h":
-    ctypedef struct BitwuzlaTerm:
+# Extract C++ exception message.
+cdef extern from *:
+    """
+    #include <bitwuzla/cpp/bitwuzla.h>
+
+    const char*
+    get_err_msg()
+    {
+      try
+      {
+        throw;
+      }
+      catch (const bitwuzla::Exception& e)
+      {
+        return e.what();
+      }
+    }
+    """
+    cdef const char* get_err_msg()
+
+cdef inline int raise_error() except *:
+    msg = get_err_msg().decode().split("', ")
+    raise BitwuzlaException(msg[1] if len(msg) > 1 else msg[0])
+
+# Extract FP value as tuple of strings
+cdef extern from *:
+    """
+    #include <bitwuzla/cpp/bitwuzla.h>
+
+    std::vector<std::string>
+    get_fp_value_ieee(const bitwuzla::Term& term, uint8_t base)
+    {
+      auto val =
+        term.value<std::tuple<std::string, std::string, std::string>>(base);
+      return {std::get<0>(val), std::get<1>(val), std::get<2>(val)};
+    }
+    """
+    cdef vector[string] get_fp_value_ieee(const Term& term, uint8_t base)
+
+# Terminator wrapper
+cdef extern from "terminator.h":
+    cdef cppclass PyTerminator:
+        PyTerminator(PyObject* terminator)
+        bool terminate()
+
+
+# Bitwuzla C++ API
+cdef extern from "bitwuzla/cpp/bitwuzla.h" namespace "bitwuzla":
+
+    string copyright() except +raise_error
+    string version() except +raise_error
+    string git_id() except +raise_error
+
+    cdef enum class Kind:
         pass
-    ctypedef struct Bitwuzla:
-        pass
-    ctypedef struct BitwuzlaSort:
-        pass
-    ctypedef enum BitwuzlaOption:
-        pass
-    cdef struct BitwuzlaOptionInfo_union_numeric:
-        uint32_t cur_val
-    cdef struct BitwuzlaOptionInfo_union_string:
-        const char *cur_val;
-    cdef union BitwuzlaOptionInfo_union:
-        BitwuzlaOptionInfo_union_numeric numeric
-        BitwuzlaOptionInfo_union_string string
-    ctypedef struct BitwuzlaOptionInfo:
-        bool is_numeric
-        BitwuzlaOptionInfo_union_numeric numeric
-        BitwuzlaOptionInfo_union_string string
-    ctypedef enum BitwuzlaKind:
-        pass
-    ctypedef enum BitwuzlaBVBase:
-        pass
-    ctypedef enum BitwuzlaResult:
-        pass
-    ctypedef enum BitwuzlaRoundingMode:
+
+    cdef enum class Result:
         pass
 
-# -------------------------------------------------------------------------- #
-# Bitwuzla                                                                   #
-# -------------------------------------------------------------------------- #
+    cdef enum class RoundingMode:
+        pass
 
-    Bitwuzla *bitwuzla_new() \
-        except +raise_py_error
-    void bitwuzla_delete(Bitwuzla *bitwuzla) \
-        except +raise_py_error
+    cdef enum class Option:
+        pass
 
-    const char *bitwuzla_copyright(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-    const char *bitwuzla_version(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-    const char *bitwuzla_git_id(Bitwuzla *bitwuzla) \
-        except +raise_py_error
+    cdef cppclass set_bv_format:
+        set_bv_format(uint8_t base) except +raise_error
+        pass
 
-    bool bitwuzla_terminate(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-    void bitwuzla_set_termination_callback(Bitwuzla *bitwuzla,
-                                           int32_t (*fun)(void *),
-                                           void *state) \
-        except +raise_py_error
-    void *bitwuzla_get_termination_callback_state(Bitwuzla *bitwuzla) \
-        except +raise_py_error
+    cdef cppclass Options:
+        Options() except +raise_error
+        bool is_valid(const string& name) except +raise_error
+        bool is_bool(Option option) except +raise_error
+        bool is_numeric(Option option) except +raise_error
+        bool is_mode(Option option) except +raise_error
+        const char *shrt(Option option) except +raise_error
+        const char *lng(Option option) except +raise_error
+        const char *description(Option option) except +raise_error
+        vector[string] modes(Option option) except +raise_error
+        Option option(const char *name) except +raise_error
+        void set(Option option, uint64_t value) except +raise_error
+        void set(Option option, const string &mode) except +raise_error
+        #void set(const string &lng, const string &value) except +raise_error
+        void set(const vector[string] &args) except +raise_error
+        uint64_t get(Option option) except +raise_error
+        const string &get_mode(Option option) except +raise_error
 
-    void bitwuzla_set_abort_callback(void (*fun)(const char *msg)) \
-        except +raise_py_error
+    cdef enum class CppOptionInfoKind "bitwuzla::OptionInfo::Kind":
+        BOOL,
+        NUMERIC,
+        MODE,
+        STRING
 
-    void bitwuzla_set_option(Bitwuzla *bitwuzla,
-                             BitwuzlaOption option,
-                             uint32_t val) \
-        except +raise_py_error
-    void bitwuzla_set_option_str(Bitwuzla *bitwuzla,
-                                 BitwuzlaOption option,
-                                 const char *val) \
-        except +raise_py_error
-    uint32_t bitwuzla_get_option(Bitwuzla *bitwuzla, BitwuzlaOption option) \
-        except +raise_py_error
+    cdef cppclass OptionInfoBool "bitwuzla::OptionInfo::Bool":
+        bool cur
+        bool dflt
 
-    void bitwuzla_get_option_info(Bitwuzla *bitwuzla,
-                                  BitwuzlaOption option,
-                                  BitwuzlaOptionInfo *info) \
-        except +raise_py_error
+    cdef cppclass OptionInfoNumeric "bitwuzla::OptionInfo::Numeric":
+        uint64_t cur
+        uint64_t dflt
+        uint64_t min
+        uint64_t max
 
-    const BitwuzlaSort *bitwuzla_mk_array_sort(Bitwuzla *bitwuzla,
-                                               const BitwuzlaSort *index,
-                                               const BitwuzlaSort *element) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_mk_bool_sort(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_mk_bv_sort(Bitwuzla *bitwuzla, uint32_t size) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_mk_fp_sort(Bitwuzla *bitwuzla,
-                                            uint32_t exp_size,
-                                            uint32_t sig_size) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_mk_fun_sort(Bitwuzla *bitwuzla,
-                                             uint32_t arity,
-                                             const BitwuzlaSort *domain[],
-                                             const BitwuzlaSort *codomain) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_mk_rm_sort(Bitwuzla *bitwuzla) \
-        except +raise_py_error
+    cdef cppclass OptionInfoMode "bitwuzla::OptionInfo::Mode":
+        string cur
+        string dflt
+        vector[string] modes
 
-#    const BitwuzlaTerm *bitwuzla_mk_true(Bitwuzla *bitwuzla) \
-#        except +raise_py_error
-#    const BitwuzlaTerm *bitwuzla_mk_false(Bitwuzla *bitwuzla) \
-#        except +raise_py_error
+    cdef cppclass OptionInfoString "bitwuzla::OptionInfo::String":
+        string cur
+        string dflt
 
-#    const BitwuzlaTerm *bitwuzla_mk_bv_zero(Bitwuzla *bitwuzla,
-#                                      const BitwuzlaSort *sort) \
-#        except +raise_py_error
-#    const BitwuzlaTerm *bitwuzla_mk_bv_one(Bitwuzla *bitwuzla,
-#                                     const BitwuzlaSort *sort) \
-#        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_bv_ones(Bitwuzla *bitwuzla,
-                                            const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_bv_min_signed(Bitwuzla *bitwuzla,
-                                                  const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_bv_max_signed(Bitwuzla *bitwuzla,
-                                                  const BitwuzlaSort *sort) \
-        except +raise_py_error
+    cdef cppclass OptionInfo:
+        OptionInfo()
+        OptionInfo(Options options, Option option) except +raise_error
+        CppOptionInfoKind kind
+        const char* lng
+        const char* shrt
+        const char* description
+        OptionInfoBool value[OptionInfoBool]() except +raise_error
+        OptionInfoNumeric value[OptionInfoNumeric]() except +raise_error
+        OptionInfoMode value[OptionInfoMode]() except +raise_error
+        OptionInfoString value[OptionInfoString]() except +raise_error
 
-    const BitwuzlaTerm *bitwuzla_mk_fp_pos_zero(Bitwuzla *bitwuzla,
-                                                const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_fp_neg_zero(Bitwuzla *bitwuzla,
-                                                const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_fp_pos_inf(Bitwuzla *bitwuzla,
-                                               const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_fp_neg_inf(Bitwuzla *bitwuzla,
-                                               const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaTerm *bitwuzla_mk_fp_nan(Bitwuzla *bitwuzla,
-                                           const BitwuzlaSort *sort) \
-        except +raise_py_error
+    cdef cppclass Sort:
+        Sort() except +raise_error
+        bool is_null() except +raise_error
+        uint64_t id() except +raise_error
+        uint64_t bv_size() except +raise_error
+        uint64_t fp_exp_size() except +raise_error
+        uint64_t fp_sig_size() except +raise_error
+        Sort array_index() except +raise_error
+        Sort array_element() except +raise_error
+        vector[Sort] fun_domain() except +raise_error
+        Sort fun_codomain() except +raise_error
+        size_t fun_arity() except +raise_error
+        optional[string] uninterpreted_symbol() except +raise_error
+        bool is_array() except +raise_error
+        bool is_bool() except +raise_error
+        bool is_bv() except +raise_error
+        bool is_fp() except +raise_error
+        bool is_fun() except +raise_error
+        bool is_rm() except +raise_error
+        bool is_uninterpreted() except +raise_error
+        string str() except +raise_error
+        bool operator==(const Sort&) except +raise_error
 
-    const BitwuzlaTerm *bitwuzla_mk_bv_value(Bitwuzla *bitwuzla,
-                                             const BitwuzlaSort *sort,
-                                             const char *value,
-                                             BitwuzlaBVBase base) \
-        except +raise_py_error
+    cdef cppclass Term:
+        Term() except +raise_error
+        bool is_null() except +raise_error
+        uint64_t id() except +raise_error
+        Kind kind() except +raise_error
+        Sort sort() except +raise_error
+        size_t num_children() except +raise_error
+        vector[Term] children() except +raise_error
+        Term operator[](size_t index) except +raise_error
+        size_t num_indices() except +raise_error
+        vector[uint64_t] indices() except +raise_error
+        optional[reference_wrapper[const string]] symbol() except +raise_error
+        bool is_const() except +raise_error
+        bool is_variable() except +raise_error
+        bool is_value() except +raise_error
+        bool is_true() except +raise_error
+        bool is_false() except +raise_error
+        bool is_bv_value_zero() except +raise_error
+        bool is_bv_value_one() except +raise_error
+        bool is_bv_value_ones() except +raise_error
+        bool is_bv_value_min_signed() except +raise_error
+        bool is_bv_value_max_signed() except +raise_error
+        bool is_fp_value_pos_zero() except +raise_error
+        bool is_fp_value_neg_zero() except +raise_error
+        bool is_fp_value_pos_inf() except +raise_error
+        bool is_fp_value_neg_inf() except +raise_error
+        bool is_fp_value_nan() except +raise_error
+        bool is_rm_value_rna() except +raise_error
+        bool is_rm_value_rne() except +raise_error
+        bool is_rm_value_rtn() except +raise_error
+        bool is_rm_value_rtp() except +raise_error
+        bool is_rm_value_rtz() except +raise_error
+        string str(uint8_t base) except +raise_error
+        string fp_value_to_real_str() except +raise_error
+        bool value[bool](uint8_t base) except +raise_error
+        RoundingMode value[RoundingMode](uint8_t base) except +raise_error
+        string value[string](uint8_t base) except +raise_error
+        bool operator==(const Term&) except +raise_error
 
-#    const BitwuzlaTerm *bitwuzla_mk_bv_value_uint64(Bitwuzla *bitwuzla,
-#                                              const BitwuzlaSort *sort,
-#                                              uint64_t value) \
-#        except +raise_py_error
+    cdef cppclass Terminator:
+        pass
 
-    const BitwuzlaTerm *bitwuzla_mk_fp_value(
-            Bitwuzla *bitwuzla,
-            const BitwuzlaTerm *bv_sign,
-            const BitwuzlaTerm *bv_exponent,
-            const BitwuzlaTerm *bv_significand) \
-        except +raise_py_error
+    cdef cppclass TermManager:
+        Sort mk_array_sort(const Sort &index,
+                           const Sort &element) except +raise_error
+        Sort mk_bool_sort() except +raise_error
+        Sort mk_bv_sort(uint64_t size) except +raise_error
+        Sort mk_fp_sort(uint64_t exp_size,
+                        uint64_t sig_size) except +raise_error
+        Sort mk_fun_sort(const vector[Sort] &domain,
+                         const Sort &codomain) except +raise_error
+        Sort mk_rm_sort() except +raise_error
+        Sort mk_uninterpreted_sort(
+                optional[const string] symbol) except +raise_error
 
-    const BitwuzlaTerm *bitwuzla_mk_fp_value_from_real(
-            Bitwuzla *bitwuzla,
-            const BitwuzlaSort *sort,
-            const BitwuzlaTerm *rm,
-            const char *real) \
-        except +raise_py_error
+        Term mk_true() except +raise_error
+        Term mk_false() except +raise_error
+        Term mk_bv_zero(const Sort &sort) except +raise_error
+        Term mk_bv_one(const Sort &sort) except +raise_error
+        Term mk_bv_ones(const Sort &sort) except +raise_error
+        Term mk_bv_min_signed(const Sort &sort) except +raise_error
+        Term mk_bv_max_signed(const Sort &sort) except +raise_error
+        Term mk_bv_value(const Sort &sort,
+                         const string &value, uint8_t base) except +raise_error
+        Term mk_fp_pos_zero(const Sort &sort) except +raise_error
+        Term mk_fp_neg_zero(const Sort &sort) except +raise_error
+        Term mk_fp_pos_inf(const Sort &sort) except +raise_error
+        Term mk_fp_neg_inf(const Sort &sort) except +raise_error
+        Term mk_fp_nan(const Sort &sort) except +raise_error
+        Term mk_fp_value(const Term &bv_sign,
+                         const Term &bv_exponent,
+                         const Term &bv_significand) except +raise_error
+        Term mk_fp_value(const Sort &sort,
+                         const Term &rm,
+                         const string &real) except +raise_error
+        Term mk_fp_value(const Sort &sort,
+                         const Term &rm,
+                         const string &num,
+                         const string &den) except +raise_error
+        Term mk_const_array(const Sort &sort,
+                            const Term &term) except +raise_error
+        Term mk_rm_value(RoundingMode rm) except +raise_error
+        Term mk_term(Kind kind,
+                     const vector[Term] &args,
+                     const vector[uint64_t] &indices) except +raise_error
+        Term mk_const(const Sort &sort,
+                      optional[const string] symbol) except +raise_error
+        Term mk_var(const Sort &sort,
+                    optional[const string] symbol) except +raise_error
 
-    const BitwuzlaTerm *bitwuzla_mk_fp_value_from_rational(
-            Bitwuzla *bitwuzla,
-            const BitwuzlaSort *sort,
-            const BitwuzlaTerm *rm,
-            const char *num,
-            const char *den) \
-        except +raise_py_error
+        Term substitute_term(const Term &term,
+                             const unordered_map[Term, Term] &map) \
+                                except +raise_error
 
-    const BitwuzlaTerm *bitwuzla_mk_rm_value(Bitwuzla *bitwuzla,
-                                             BitwuzlaRoundingMode rm) \
-        except +raise_py_error
+        void substitute_terms(vector[Term] &terms,
+                              const unordered_map[Term, Term] &map) \
+                                except +raise_error
 
-    const BitwuzlaTerm *bitwuzla_mk_term1(Bitwuzla *bitwuzla,
-                                          BitwuzlaKind kind,
-                                          const BitwuzlaTerm *arg) \
-        except +raise_py_error
-
-#    const BitwuzlaTerm *bitwuzla_mk_term2(Bitwuzla *bitwuzla,
-#                                          BitwuzlaKind kind,
-#                                          const BitwuzlaTerm *arg0,
-#                                          const BitwuzlaTerm *arg1) \
-#        except +raise_py_error
-#
-#    const BitwuzlaTerm *bitwuzla_mk_term3(Bitwuzla *bitwuzla,
-#                                          BitwuzlaKind kind,
-#                                          const BitwuzlaTerm *arg0,
-#                                          const BitwuzlaTerm *arg1,
-#                                          const BitwuzlaTerm *arg2) \
-#        except +raise_py_error
-#
-    const BitwuzlaTerm *bitwuzla_mk_term(Bitwuzla *bitwuzla,
-                                   BitwuzlaKind kind,
-                                   uint32_t argc,
-                                   const BitwuzlaTerm *args[]) \
-        except +raise_py_error
-
-#    const BitwuzlaTerm *bitwuzla_mk_term1_indexed1(Bitwuzla *bitwuzla,
-#                                                   BitwuzlaKind kind,
-#                                                   const BitwuzlaTerm *arg,
-#                                                   uint32_t idx) \
-#        except +raise_py_error
-#
-#    const BitwuzlaTerm *bitwuzla_mk_term1_indexed2(Bitwuzla *bitwuzla,
-#                                                   BitwuzlaKind kind,
-#                                                   const BitwuzlaTerm *arg,
-#                                                   uint32_t idx0,
-#                                                   uint32_t idx1) \
-#        except +raise_py_error
-#
-#    const BitwuzlaTerm *bitwuzla_mk_term2_indexed1(Bitwuzla *bitwuzla,
-#                                                   BitwuzlaKind kind,
-#                                                   const BitwuzlaTerm *arg0,
-#                                                   const BitwuzlaTerm *arg1,
-#                                                   uint32_t idx) \
-#        except +raise_py_error
-#
-#    const BitwuzlaTerm *bitwuzla_mk_term2_indexed2(Bitwuzla *bitwuzla,
-#                                                   BitwuzlaKind kind,
-#                                                   const BitwuzlaTerm *arg0,
-#                                                   const BitwuzlaTerm *arg1,
-#                                                   uint32_t idx0,
-#                                                   uint32_t idx1) \
-#        except       +raise_py_error
-
-    const BitwuzlaTerm *bitwuzla_mk_term_indexed(Bitwuzla *bitwuzla,
-                                                 BitwuzlaKind kind,
-                                                 uint32_t argc,
-                                                 const BitwuzlaTerm *args[],
-                                                 uint32_t idxc,
-                                                 uint32_t idxs[]) \
-        except +raise_py_error
-
-    const BitwuzlaTerm *bitwuzla_mk_const(Bitwuzla *bitwuzla,
-                                         const BitwuzlaSort *sort,
-                                         const char *symbol) \
-        except +raise_py_error
-
-    const BitwuzlaTerm *bitwuzla_mk_const_array(Bitwuzla *bitwuzla,
-                                                const BitwuzlaSort *sort,
-                                                const BitwuzlaTerm *value) \
-        except +raise_py_error
-
-    const BitwuzlaTerm *bitwuzla_mk_var(Bitwuzla *bitwuzla,
-                                        const BitwuzlaSort *sort,
-                                        const char *symbol) \
-        except +raise_py_error
-
-    void bitwuzla_push(Bitwuzla *bitwuzla, uint32_t nlevels) \
-        except +raise_py_error
-    void bitwuzla_pop(Bitwuzla *bitwuzla, uint32_t nlevels) \
-        except +raise_py_error
-
-    void bitwuzla_assert(Bitwuzla *bitwuzla, const BitwuzlaTerm *term) \
-        except +raise_py_error
-    void bitwuzla_assume(Bitwuzla *bitwuzla, const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_is_unsat_assumption(Bitwuzla *bitwuzla,
-                                      const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    const BitwuzlaTerm **bitwuzla_get_unsat_assumptions(
-            Bitwuzla *bitwuzla, size_t *size) \
-        except +raise_py_error
-    const BitwuzlaTerm **bitwuzla_get_unsat_core(
-            Bitwuzla *bitwuzla, size_t *size) \
-        except +raise_py_error
-
-    void bitwuzla_fixate_assumptions(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-    void bitwuzla_reset_assumptions(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-
-    BitwuzlaResult bitwuzla_simplify(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-
-    BitwuzlaResult bitwuzla_check_sat(Bitwuzla *bitwuzla) \
-        except +raise_py_error
-
-    const BitwuzlaTerm *bitwuzla_get_value(Bitwuzla *bitwuzla,
-                                           const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    const char *bitwuzla_get_bv_value(Bitwuzla *bitwuzla,
-                                      const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    void bitwuzla_get_fp_value(Bitwuzla *bitwuzla,
-                               const BitwuzlaTerm *term,
-                               const char **sign,
-                               const char **exponent,
-                               const char **significand) \
-        except +raise_py_error
-
-    const char *bitwuzla_get_rm_value(Bitwuzla *bitwuzla,
-                                      const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    void bitwuzla_get_array_value(Bitwuzla *bitwuzla,
-                                  const BitwuzlaTerm *term,
-                                  const BitwuzlaTerm ***indices,
-                                  const BitwuzlaTerm ***values,
-                                  size_t *size,
-                                  const BitwuzlaTerm **default_value) \
-        except +raise_py_error
-
-    void bitwuzla_get_fun_value(Bitwuzla *bitwuzla,
-                                const BitwuzlaTerm *term,
-                                const BitwuzlaTerm ****args,
-                                size_t *arity,
-                                const BitwuzlaTerm ***values,
-                                size_t *size) \
-        except +raise_py_error
+    cdef cppclass Bitwuzla:
+        Bitwuzla(TermManager& tm, const Options &options) except +raise_error
+        void configure_terminator(Terminator *terminator) except +raise_error
+        void push(uint32_t nlevels) except +raise_error
+        void pop(uint32_t nlevels) except +raise_error
+        void assert_formula(const Term &term) except +raise_error
+        vector[Term] get_assertions() except +raise_error;
+        bool is_unsat_assumption(const Term &term) except +raise_error
+        vector[Term] get_unsat_assumptions() except +raise_error
+        vector[Term] get_unsat_core() except +raise_error
+        void simplify() except +raise_error
+        Term simplify(const Term& term) except +raise_error
+        Result check_sat(const vector[Term] &assumptions) except +raise_error
+        Term get_value(const Term &term) except +raise_error
+        void print_formula(ostream& outfile, string& fmt) except +raise_error
+        void print_unsat_core(ostream& outfile, string& fmt) except +raise_error
+        map[string, string] statistics() except +raise_error
+        TermManager& term_mgr() except +raise_error
 
 
-    void bitwuzla_print_model(Bitwuzla *bitwuzla,
-                              const char *format, FILE *file) \
-        except +raise_py_error
+cdef extern from "bitwuzla/cpp/parser.h" namespace "bitwuzla::parser":
 
-    void bitwuzla_dump_formula(Bitwuzla *bitwuzla,
-                               const char *format, FILE *file) \
-        except +raise_py_error
-
-#    BitwuzlaResult bitwuzla_parse(Bitwuzla *bitwuzla,
-#                                  FILE *infile,
-#                                  const char *infile_name,
-#                                  FILE *outfile,
-#                                  char **error_msg,
-#                                  int32_t *parsed_status,
-#                                  bool *parsed_smt2) \
-#        except +raise_py_error
-#
-#    BitwuzlaResult bitwuzla_parse_format(Bitwuzla *bitwuzla,
-#                                         const char *format,
-#                                         FILE *infile,
-#                                         const char *infile_name,
-#                                         FILE *outfile,
-#                                         char **error_msg,
-#                                         int32_t *parsed_status) \
-#        except +raise_py_error
-
-    void bitwuzla_substitute_terms(Bitwuzla *bitwuzla,
-                                   size_t terms_size,
-                                   const BitwuzlaTerm *terms[],
-                                   size_t map_size,
-                                   const BitwuzlaTerm *map_keys[],
-                                   const BitwuzlaTerm *map_values[]) \
-        except +raise_py_error
-
-# -------------------------------------------------------------------------- #
-# BitwuzlaSort                                                               #
-# -------------------------------------------------------------------------- #
-
-    size_t bitwuzla_sort_hash(const BitwuzlaSort *sort) \
-        except +raise_py_error
-
-    uint32_t bitwuzla_sort_bv_get_size(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    uint32_t bitwuzla_sort_fp_get_exp_size(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    uint32_t bitwuzla_sort_fp_get_sig_size(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_sort_array_get_index(
-            const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_sort_array_get_element(
-            const BitwuzlaSort *sort) \
-        except +raise_py_error
-    const BitwuzlaSort **bitwuzla_sort_fun_get_domain_sorts(
-        const BitwuzlaSort *sort,
-        size_t *size) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_sort_fun_get_codomain(
-            const BitwuzlaSort *sort) \
-        except +raise_py_error
-    uint32_t bitwuzla_sort_fun_get_arity(const BitwuzlaSort *sort) \
-        except +raise_py_error
-
-    bool bitwuzla_sort_is_equal(const BitwuzlaSort *sort0,
-                                const BitwuzlaSort *sort1) \
-        except +raise_py_error
-    bool bitwuzla_sort_is_array(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    bool bitwuzla_sort_is_bv(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    bool bitwuzla_sort_is_fp(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    bool bitwuzla_sort_is_fun(const BitwuzlaSort *sort) \
-        except +raise_py_error
-    bool bitwuzla_sort_is_rm(const BitwuzlaSort *sort) \
-        except +raise_py_error
-
-# -------------------------------------------------------------------------- #
-# BitwuzlaTerm                                                               #
-# -------------------------------------------------------------------------- #
-
-    size_t bitwuzla_term_hash(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    BitwuzlaKind bitwuzla_term_get_kind(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    const BitwuzlaTerm **bitwuzla_term_get_children(const BitwuzlaTerm *term,
-                                                    size_t *size) \
-        except +raise_py_error
-
-    uint32_t *bitwuzla_term_get_indices(const BitwuzlaTerm *term,
-                                              size_t *size) \
-        except +raise_py_error
-
-    bool bitwuzla_term_is_indexed(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-#    Bitwuzla *bitwuzla_term_get_bitwuzla(const BitwuzlaTerm *term) \
-#        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_term_get_sort(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_term_array_get_index_sort(
-            const BitwuzlaTerm *term) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_term_array_get_element_sort(
-            const BitwuzlaTerm *term) \
-        except +raise_py_error
-    const BitwuzlaSort **bitwuzla_term_fun_get_domain_sorts(
-        const BitwuzlaTerm *term,
-        size_t *size) \
-        except +raise_py_error
-    const BitwuzlaSort *bitwuzla_term_fun_get_codomain_sort(
-            const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    uint32_t bitwuzla_term_bv_get_size(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    uint32_t bitwuzla_term_fp_get_exp_size(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    uint32_t bitwuzla_term_fp_get_sig_size(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    uint32_t bitwuzla_term_fun_get_arity(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    const char *bitwuzla_term_get_symbol(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    void bitwuzla_term_set_symbol(
-            const BitwuzlaTerm *term, const char *symbol) \
-        except +raise_py_error
-
-#    bool bitwuzla_term_is_equal_sort(const BitwuzlaTerm *term0,
-#                                     const BitwuzlaTerm *term1) \
-#        except +raise_py_error
-
-    bool bitwuzla_term_is_array(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_const(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fun(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_var(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_bound_var(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    bool bitwuzla_term_is_bv_value(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fp_value(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_rm_value(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    bool bitwuzla_term_is_bv(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fp(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_rm(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    bool bitwuzla_term_is_bv_value_zero(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_bv_value_one(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_bv_value_ones(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_bv_value_min_signed(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_bv_value_max_signed(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    bool bitwuzla_term_is_fp_value_pos_zero(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fp_value_neg_zero(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fp_value_pos_inf(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fp_value_neg_inf(const BitwuzlaTerm *term) \
-        except +raise_py_error
-    bool bitwuzla_term_is_fp_value_nan(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    bool bitwuzla_term_is_const_array(const BitwuzlaTerm *term) \
-        except +raise_py_error
-
-    void bitwuzla_term_dump(const BitwuzlaTerm *term,
-                            const char *format,
-                            FILE *file) \
-        except +raise_py_error
+    cdef cppclass Parser:
+        Parser(TermManager& tm,
+               Options& options,
+               const string& language,
+               ostream* out) except +raise_error
+        void configure_auto_print_model(bool value) except +raise_error
+        void parse(const string& infile_name, bool parse_only, bool parse_file) except +raise_error
+        Term parse_term(const string& iinput) except +raise_error
+        Sort parse_sort(const string& iinput) except +raise_error
+        vector[Sort] get_declared_sorts() except +raise_error
+        vector[Term] get_declared_funs() except +raise_error
+        string error_msg() except +raise_error
+        shared_ptr[Bitwuzla] bitwuzla() except +raise_error
 
 # -------------------------------------------------------------------------- #

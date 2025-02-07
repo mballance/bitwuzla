@@ -2,7 +2,7 @@ Bitwuzla API Examples
 =====================
 
 This directory contains examples that illustrate how to use Bitwuzla's
-C and Python APIs.
+C, C++ and Python APIs.
 
 Build
 -----
@@ -11,21 +11,31 @@ The examples in this directory are not built by default.
 To build, issue the following commands.
 
 ```
-mkdir <build_dir>
+meson setup <build_dir>
 cd <build_dir>
-cmake ..
-make                     # use -jN to build with N threads
-ctest                    # run all examples, use -jN to run with N threads
-ctest -R <example>       # run <example>
-./bin/path/to/<example>  # alternative way to run example
+meson compile
+meson test               # run all examples (stdout output not printed)
+meson test -v            # run all examples (stdout output printed)
+./<path>/<example>       # alternative way to run example
 ```
 
 **Note:** If you installed Bitwuzla in a non-standard location, you have to
-additionally specify `CMAKE_PREFIX_PATH` to point to the location of
-`BitwuzlaConfig.cmake` (usually `<your-install-prefix>/lib/cmake`) as follows:
-
+additionally specify the path to the `pkgconfig` directory before when calling
+`meson setup` as follows:
 ```
-  cmake .. -DCMAKE_PREFIX_PATH=<your-install-prefix>/lib/cmake
+meson setup <build_dir> --pkg-config-path=<your-install-prefix>/lib/pkgconfig
 ```
 
-The examples binaries are built into `<build_dir>/bin`.
+The examples binaries are built into `<build_dir>/<path>`, where `<path>`
+mirrors the path to the source files, e.g., `<build_dir>/c/quickstart` for
+example `c/quickstart.c`.
+
+To enable Python examples in the test suite, configure the build directory
+with a path to the Bitwuzla Python module. For the non-standard
+location from above, call `meson setup` as follows:
+```
+meson setup <build_dir> --pkg-config-path=<your-install-prefix>/lib/pkgconfig \
+    -Dpython_path=<your-install-prefix>/lib/python<version>/site-packages/
+```
+Python Examples can also be run manually via
+`python python/<example_name>`, e.g., `python python/quickstart.py`.
